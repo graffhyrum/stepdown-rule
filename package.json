@@ -1,0 +1,58 @@
+{
+	"name": "@stepdown/analyzer",
+	"version": "0.1.0",
+	"private": true,
+	"description": "TypeScript AST analyzer that enforces the stepdown rule for function organization",
+	"keywords": [
+		"ast",
+		"code-quality",
+		"function-organization",
+		"static-analysis",
+		"stepdown-rule",
+		"typescript"
+	],
+	"license": "MIT",
+	"author": "",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/graffhyrum/stepdown-rule.git"
+	},
+	"bin": {
+		"stepdown-rule": "./dist/cli.js"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"scripts": {
+		"build": "bun scripts/build.ts && bun run build:declaration",
+		"build:declaration": "tsc --emitDeclarationOnly --project tsconfig.types.json",
+		"postbuild": "bun run --shell bun remove-buildinfo",
+		"remove-buildinfo": "rm -rf tsconfig.types.tsbuildinfo",
+		"dev": "bun run src/cli.ts",
+		"test": "bun test",
+		"typecheck": "tsc --noEmit",
+		"check": "biome check .",
+		"fix": "biome check --write .",
+		"fastvet": "bun typecheck && bun fix && bun run scripts/rule-validator.ts  && bun run test",
+		"vet": "bun fastvet"
+	},
+	"dependencies": {
+		"commander": "^14.0.3",
+		"glob": "^13.0.0",
+		"picocolors": "^1.1.1",
+		"typescript": "^5.9.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3.13",
+		"@changesets/cli": "^2.29.8",
+		"@types/bun": "^1.3.8",
+		"@types/node": "^25.2.0"
+	},
+	"engines": {
+		"node": ">=18.0.0"
+	}
+}
