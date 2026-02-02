@@ -1,0 +1,46 @@
+export interface FunctionInfo {
+	name: string;
+	kind: "declaration" | "arrow-function" | "function-expression";
+	position: {
+		line: number;
+		column: number;
+		start: number;
+		end: number;
+	};
+	isExported: boolean;
+	dependencies: string[];
+	canBeFunctionDeclaration: boolean;
+}
+
+export interface StepdownViolation {
+	file: string;
+	function: FunctionInfo;
+	dependency: FunctionInfo;
+	message: string;
+}
+
+export interface AnalysisResult {
+	file: string;
+	violations: StepdownViolation[];
+	circularDependencies: string[][];
+	totalFunctions: number;
+}
+
+export interface Config {
+	ignore: string[];
+	analyzeArrowFunctions: boolean;
+	analyzeExportsOnly: boolean;
+	reportCircularDependencies: boolean;
+	fix: boolean;
+	json: boolean;
+	outputFile?: string;
+}
+
+export interface FixResult {
+	file: string;
+	fixed: boolean;
+	originalContent: string;
+	fixedContent: string;
+	reordered: number;
+	errors: string[];
+}
