@@ -3,6 +3,7 @@
 import { Command } from "commander";
 import picocolors from "picocolors";
 import { analyzeFiles } from "./analyzer";
+import { loadConfig } from "./config/loader";
 import { fixFiles } from "./fixer";
 import type { AnalysisResult, Config, FixResult } from "./types";
 
@@ -10,17 +11,20 @@ function getErrorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-function createConfig(options: {
+async function createConfig(options: {
 	ignore?: string[];
 	fix?: boolean;
 	json?: boolean;
 	outputFile?: string;
-}): Config {
+	config?: string;
+}): Promise<Config> {
+	const fileConfig = await loadConfig(options.config);
+
 	return {
-		ignore: options.ignore || [],
-		analyzeArrowFunctions: true,
-		analyzeExportsOnly: false,
-		reportCircularDependencies: true,
+		ignore: options.ignore ?? fileConfig.ignore,
+		analyzeArrowFunctions: fileConfig.analyzeArrowFunctions,
+		analyzeExportsOnly: fileConfig.analyzeExportsOnly,
+		reportCircularDependencies: fileConfig.reportCircularDependencies,
 		fix: options.fix ?? false,
 		json: options.json ?? false,
 		outputFile: options.outputFile,
@@ -130,7 +134,7 @@ program
 	.option("--ignore <patterns...>", "Additional ignore patterns")
 	.option("--config <file>", "Configuration file path", ".stepdownrc.json")
 	.action(async (patterns: string[], options) => {
-		const config = createConfig(options);
+		const config = await createConfig(options);
 
 		try {
 			if (config.fix) {

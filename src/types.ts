@@ -26,16 +26,6 @@ export interface AnalysisResult {
 	totalFunctions: number;
 }
 
-export interface Config {
-	ignore: string[];
-	analyzeArrowFunctions: boolean;
-	analyzeExportsOnly: boolean;
-	reportCircularDependencies: boolean;
-	fix: boolean;
-	json: boolean;
-	outputFile?: string;
-}
-
 export interface FixResult {
 	file: string;
 	fixed: boolean;
@@ -44,3 +34,12 @@ export interface FixResult {
 	reordered: number;
 	errors: string[];
 }
+
+// Re-export schemas from config module for backward compatibility
+export type { Config, FileConfig } from "./config/schema";
+export {
+	ConfigJsonSchema,
+	ConfigSchema,
+	FileConfigJsonSchema,
+	FileConfigSchema,
+} from "./config/schema";
