@@ -79,12 +79,22 @@ Create a `.stepdownrc.json` file:
 
 ```json
 {
+  "$schema": "./stepdown-schema.json",
   "ignore": ["node_modules/**", "dist/**", "*.test.ts", "*.spec.ts"],
   "analyzeArrowFunctions": true,
   "analyzeExportsOnly": false,
   "reportCircularDependencies": true
 }
 ```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `ignore` | `string[]` | `[]` | Array of glob patterns to ignore when analyzing files |
+| `analyzeArrowFunctions` | `boolean` | `true` | Whether to analyze arrow functions for stepdown violations |
+| `analyzeExportsOnly` | `boolean` | `false` | Whether to only analyze exported functions |
+| `reportCircularDependencies` | `boolean` | `true` | Whether to report circular dependencies |
 
 ## CLI Options
 
