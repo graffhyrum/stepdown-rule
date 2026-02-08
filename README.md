@@ -4,10 +4,51 @@ A TypeScript AST analyzer that enforces the stepdown rule for function organizat
 
 ## Installation
 
+This is a local package. Clone and install it:
+
 ```bash
-npm install @stepdown/analyzer
-# or
-bun add @stepdown/analyzer
+# Clone the repository
+git clone https://github.com/graffhyrum/stepdown-rule.git
+cd stepdown-rule
+
+# Install dependencies
+bun install
+
+# Build the package
+bun run build
+
+# Link globally (optional, for CLI access)
+bun link
+```
+
+### Local Usage in Another Project
+
+After linking, use it in any project:
+
+```bash
+# Link the package in your project
+cd /path/to/your-project
+bun link @stepdown/analyzer
+```
+
+Then import and use programmatically:
+
+```typescript
+import { analyzeFiles, fixFiles } from "@stepdown/analyzer";
+
+const results = await analyzeFiles(["src/**/*.ts"], {
+  analyzeArrowFunctions: true,
+  analyzeExportsOnly: false,
+  reportCircularDependencies: true,
+});
+
+console.log(results);
+```
+
+Or use the CLI:
+
+```bash
+stepdown-rule "src/**/*.ts"
 ```
 
 ## Usage
@@ -71,7 +112,7 @@ function hashPassword(password: string): string {
 }
 ```
 
-The rule: if function A calls function B, then B should appear before A in the file.
+The rule: if function A calls function B, then A should appear before B in the file.
 
 ## Configuration
 

@@ -1,8 +1,8 @@
 // Rule Compliance Validator
 // Scans code for violations of AGENTS.md rules
 
+import { promises } from "node:fs";
 import path from "node:path";
-import { glob } from "glob";
 
 interface Rule {
 	name: string;
@@ -138,8 +138,8 @@ function exitWithResult(errorCount: number, warningCount: number): never {
 async function scanFiles(
 	pattern: string,
 ): Promise<{ totalViolations: number; errorCount: number; warningCount: number }> {
-	const files = await glob(pattern, {
-		ignore: [
+	const files = promises.glob(pattern, {
+		exclude: [
 			"node_modules/**",
 			"**/node_modules/**",
 			"dist/**",
@@ -153,7 +153,7 @@ async function scanFiles(
 	let errorCount = 0;
 	let warningCount = 0;
 
-	for (const file of files) {
+	for await (const file of files) {
 		if (!shouldProcessFile(file)) {
 			continue;
 		}
@@ -170,22 +170,16 @@ async function scanFiles(
 	return { totalViolations, errorCount, warningCount };
 }
 
-async function main() {
-	const args = process.argv.slice(2);
-	const pattern = args[0] || "**/*.{ts,tsx,js,jsx}";
+const args = process.argv.slice(2);
+const pattern = args[0] || "**/*.{ts,tsx,js,jsx}";
 
-	console.log("🔍 Scanning for rule violations...\n");
+console.log("🔍 Scanning for rule violations...\n");
 
-	try {
-		const { totalViolations, errorCount, warningCount } = await scanFiles(pattern);
-		printSummaryReport(totalViolations, errorCount, warningCount);
-		exitWithResult(errorCount, warningCount);
-	} catch (error) {
-		console.error("❌ Error scanning files:", error);
-		process.exit(1);
-	}
-}
-
-if (import.meta.url === `file://${process.argv[1]}`) {
-	main().catch(console.error);
+try {
+	const { totalViolations, errorCount, warningCount } = await scanFiles(pattern);
+	printSummaryReport(totalViolations, errorCount, warningCount);
+	exitWithResult(errorCount, warningCount);
+} catch (error) {
+	console.error("❌ Error scanning files:", error);
+	process.exit(1);
 }
