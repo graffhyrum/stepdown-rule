@@ -1,17 +1,5 @@
 // Test file with correct stepdown ordering - no violations
-
-function hashPassword(password: string): string {
-	return `hashed_${password}`;
-}
-
-function validateEmail(email: string): boolean {
-	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
-function createUser(email: string, password: string) {
-	const hashed = hashPassword(password);
-	return { email, password: hashed };
-}
+// Callers appear ABOVE callees (high-level first, low-level last)
 
 function _main() {
 	console.log("Starting execution");
@@ -23,12 +11,25 @@ function _main() {
 	return user;
 }
 
-// Arrow functions in correct order
-const cleanData = (data: string): string => {
-	return data.trim();
-};
+function createUser(email: string, password: string) {
+	const hashed = hashPassword(password);
+	return { email, password: hashed };
+}
 
+function validateEmail(email: string): boolean {
+	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function hashPassword(password: string): string {
+	return `hashed_${password}`;
+}
+
+// Arrow functions in correct order (caller above callee)
 const _processData = (data: string) => {
 	const cleaned = cleanData(data);
 	return cleaned.toUpperCase();
+};
+
+const cleanData = (data: string): string => {
+	return data.trim();
 };

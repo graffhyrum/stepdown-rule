@@ -395,20 +395,20 @@ test("should handle functions that reference each other in complex ways", async 
 	setupTestDir();
 
 	const code = `
-function a() {
-	return b() + c();
-}
-
-function b() {
-	return d();
+function d() {
+	return 42;
 }
 
 function c() {
 	return d();
 }
 
-function d() {
-	return 42;
+function b() {
+	return d();
+}
+
+function a() {
+	return b() + c();
 }
 `;
 

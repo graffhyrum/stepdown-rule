@@ -15,7 +15,7 @@ A CLI tool that analyzes TypeScript files and enforces the stepdown rule:
 - Entry points and high-level functions appear first
 - Mid-level abstractions follow
 - Low-level implementation details appear last
-- Dependencies flow downward (A calls B → B appears before A)
+- Dependencies flow downward (A calls B → A appears before B)
 
 ## Core Requirements
 
@@ -158,7 +158,7 @@ stepdown-rule --config .stepdownrc.json
 #### Stepdown Validation
 
 1. For each function, collect all dependencies
-2. Verify dependencies appear before the function
+2. Verify callers appear before their dependencies
 3. Report violations with context
 4. Provide suggested ordering if fixable
 

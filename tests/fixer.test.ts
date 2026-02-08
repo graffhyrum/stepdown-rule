@@ -7,11 +7,7 @@ import type { Config } from "../src/types";
 const TEST_DIR = join(process.cwd(), "tests", "fixtures-temp");
 
 function setupTestDir() {
-	try {
-		rmSync(TEST_DIR, { recursive: true, force: true });
-	} catch {
-		// Directory doesn't exist, that's fine
-	}
+	cleanupTestDir();
 	mkdirSync(TEST_DIR, { recursive: true });
 }
 
@@ -41,11 +37,10 @@ const defaultConfig: Config = {
 test("should fix stepdown violations by reordering functions", async () => {
 	setupTestDir();
 
-	// Create a file with functions far apart (>10 lines) to trigger reorder count
+	// Violation: callee (helper) appears ABOVE caller (main)
 	const violationCode = `
-function main() {
-	const result = helper();
-	return result;
+function helper() {
+	return "helper result";
 }
 
 // Padding to ensure >10 line difference
@@ -60,8 +55,9 @@ function main() {
 // Line 9
 // Line 10
 
-function helper() {
-	return "helper result";
+function main() {
+	const result = helper();
+	return result;
 }
 `;
 
@@ -80,10 +76,10 @@ function helper() {
 	expect(fixedContent).toContain("helper");
 	expect(fixedContent).toContain("main");
 
-	// Helper should come before main in fixed version
-	const helperIndex = fixedContent.indexOf("function helper");
+	// After fix: caller (main) should come BEFORE callee (helper)
 	const mainIndex = fixedContent.indexOf("function main");
-	expect(helperIndex).toBeLessThan(mainIndex);
+	const helperIndex = fixedContent.indexOf("function helper");
+	expect(mainIndex).toBeLessThan(helperIndex);
 
 	cleanupTestDir();
 });
@@ -91,14 +87,15 @@ function helper() {
 test("should not modify files with no violations", async () => {
 	setupTestDir();
 
+	// Correct order: caller (main) before callee (helper)
 	const correctCode = `
-function helper() {
-	return "helper result";
-}
-
 function main() {
 	const result = helper();
 	return result;
+}
+
+function helper() {
+	return "helper result";
 }
 `;
 
@@ -152,14 +149,15 @@ function funcC() {
 test("should handle arrow functions", async () => {
 	setupTestDir();
 
+	// Violation: callee (helper) appears ABOVE caller (main)
 	const arrowCode = `
+const helper = () => {
+	return "helper result";
+};
+
 const main = () => {
 	const result = helper();
 	return result;
-};
-
-const helper = () => {
-	return "helper result";
 };
 `;
 
@@ -178,16 +176,17 @@ const helper = () => {
 test("should preserve imports and exports", async () => {
 	setupTestDir();
 
+	// Violation: callee (helper) appears ABOVE caller (main)
 	const codeWithImports = `
 import { something } from "somewhere";
+
+function helper() {
+	return something();
+}
 
 function main() {
 	const result = helper();
 	return result;
-}
-
-function helper() {
-	return something();
 }
 
 export { main };
@@ -213,19 +212,20 @@ export { main };
 test("should handle mixed function declarations and arrow functions", async () => {
 	setupTestDir();
 
+	// Violation: callees (arrowHelper, declHelper) appear ABOVE caller (main)
 	const mixedCode = `
-function main() {
-	const a = arrowHelper();
-	const b = declHelper();
-	return a + b;
-}
-
 const arrowHelper = () => {
 	return "arrow";
 };
 
 function declHelper() {
 	return "decl";
+}
+
+function main() {
+	const a = arrowHelper();
+	const b = declHelper();
+	return a + b;
 }
 `;
 
@@ -265,10 +265,10 @@ console.log(x, y);
 test("should handle complex dependency chains", async () => {
 	setupTestDir();
 
+	// Violation: callees appear ABOVE callers (bottom-up order)
 	const complexCode = `
-function level1() {
-	level2a();
-	level2b();
+function level3() {
+	return "base";
 }
 
 function level2a() {
@@ -279,8 +279,9 @@ function level2b() {
 	level3();
 }
 
-function level3() {
-	return "base";
+function level1() {
+	level2a();
+	level2b();
 }
 `;
 
@@ -293,16 +294,16 @@ function level3() {
 	expect(result?.fixed).toBe(true);
 
 	const fixedContent = readFileSync(filePath, "utf-8");
-	// level3 should come before level2a and level2b
-	const level3Index = fixedContent.indexOf("function level3");
+	// After fix: callers before callees (top-down order)
+	const level1Index = fixedContent.indexOf("function level1");
 	const level2aIndex = fixedContent.indexOf("function level2a");
 	const level2bIndex = fixedContent.indexOf("function level2b");
-	const level1Index = fixedContent.indexOf("function level1");
+	const level3Index = fixedContent.indexOf("function level3");
 
-	expect(level3Index).toBeLessThan(level2aIndex);
-	expect(level3Index).toBeLessThan(level2bIndex);
-	expect(level2aIndex).toBeLessThan(level1Index);
-	expect(level2bIndex).toBeLessThan(level1Index);
+	expect(level1Index).toBeLessThan(level2aIndex);
+	expect(level1Index).toBeLessThan(level2bIndex);
+	expect(level2aIndex).toBeLessThan(level3Index);
+	expect(level2bIndex).toBeLessThan(level3Index);
 
 	cleanupTestDir();
 });
@@ -321,9 +322,9 @@ test("should handle error cases gracefully", async () => {
 test("should count function reorders correctly", async () => {
 	setupTestDir();
 
-	// Create functions with >10 line spacing to trigger reorder count
+	// Violation: callees (a, b, c) appear ABOVE callers (x, y, z)
 	const reorderCode = `
-function z() { a(); }
+function a() { return 1; }
 
 // Padding 1
 // Padding 2
@@ -331,7 +332,7 @@ function z() { a(); }
 // Padding 4
 // Padding 5
 
-function y() { b(); }
+function b() { return 2; }
 
 // Padding 6
 // Padding 7
@@ -339,7 +340,7 @@ function y() { b(); }
 // Padding 9
 // Padding 10
 
-function x() { c(); }
+function c() { return 3; }
 
 // Padding 11
 // Padding 12
@@ -347,7 +348,7 @@ function x() { c(); }
 // Padding 14
 // Padding 15
 
-function c() { return 3; }
+function x() { c(); }
 
 // Padding 16
 // Padding 17
@@ -355,7 +356,7 @@ function c() { return 3; }
 // Padding 19
 // Padding 20
 
-function b() { return 2; }
+function y() { b(); }
 
 // Padding 21
 // Padding 22
@@ -363,7 +364,7 @@ function b() { return 2; }
 // Padding 24
 // Padding 25
 
-function a() { return 1; }
+function z() { a(); }
 `;
 
 	const filePath = createTestFile("test-reorder-count.ts", reorderCode);

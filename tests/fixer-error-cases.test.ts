@@ -42,12 +42,12 @@ test("should handle files with no violations or circular dependencies", async ()
 	setupTestDir();
 
 	const perfectCode = `
-function a() {
-	return 1;
-}
-
 function b() {
 	return a() + 1;
+}
+
+function a() {
+	return 1;
 }
 `;
 
@@ -91,13 +91,13 @@ test("should handle files that cannot be fixed", async () => {
 
 	// Create a file with violations but that might cause issues during fixing
 	const problematicCode = `
-function main() {
-	return helper();
-}
-
 const helper = () => {
 	return "test";
 };
+
+function main() {
+	return helper();
+}
 `;
 
 	const filePath = createTestFile("test-problematic.ts", problematicCode);
@@ -183,12 +183,12 @@ test("should handle files where fixed content equals original", async () => {
 	setupTestDir();
 
 	const alreadyCorrectCode = `
-function helper() {
-	return "helper";
-}
-
 function main() {
 	return helper();
+}
+
+function helper() {
+	return "helper";
 }
 `;
 

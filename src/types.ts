@@ -19,9 +19,17 @@ export interface StepdownViolation {
 	message: string;
 }
 
+export interface NestedFunctionViolation {
+	file: string;
+	parent: FunctionInfo;
+	nested: FunctionInfo;
+	message: string;
+}
+
 export interface AnalysisResult {
 	file: string;
 	violations: StepdownViolation[];
+	nestedFunctionViolations: NestedFunctionViolation[];
 	circularDependencies: string[][];
 	totalFunctions: number;
 }
