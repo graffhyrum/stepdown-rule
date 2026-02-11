@@ -10,6 +10,13 @@ export interface FunctionInfo {
 	isExported: boolean;
 	dependencies: string[];
 	canBeFunctionDeclaration: boolean;
+	/** Name of the parent function if this is a nested function, null for top-level functions */
+	parentFunction: string | null;
+}
+
+export interface CallSite {
+	line: number;
+	column: number;
 }
 
 export interface StepdownViolation {
@@ -17,6 +24,7 @@ export interface StepdownViolation {
 	function: FunctionInfo;
 	dependency: FunctionInfo;
 	message: string;
+	callSite: CallSite;
 }
 
 export interface NestedFunctionViolation {

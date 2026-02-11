@@ -3,6 +3,7 @@ import { glob } from "glob";
 import ts from "typescript";
 import type {
 	AnalysisResult,
+	CallSite,
 	Config,
 	FunctionInfo,
 	NestedFunctionViolation,
@@ -31,9 +32,12 @@ function analyzeFile(filePath: string): AnalysisResult {
 	const nestedFunctionViolations = findNestedFunctionViolations(sourceFile, functions);
 	const circularDependencies = detectCircularDependencies(functions, callGraph);
 
+	// Filter out violations that are part of circular dependency cycles (not actionable)
+	const actionableViolations = filterOutCircularViolations(violations, circularDependencies);
+
 	return {
 		file: filePath,
-		violations,
+		violations: actionableViolations,
 		nestedFunctionViolations,
 		circularDependencies,
 		totalFunctions: functions.length,
@@ -43,25 +47,42 @@ function analyzeFile(filePath: string): AnalysisResult {
 function extractFunctions(sourceFile: ts.SourceFile): FunctionInfo[] {
 	const functions: FunctionInfo[] = [];
 
-	function visit(node: ts.Node) {
+	visit(sourceFile, null);
+	return functions;
+
+	function visit(node: ts.Node, parentFunction: string | null) {
 		if (ts.isFunctionDeclaration(node) && node.name) {
-			handleFunctionDeclaration({ name: node.name, node, sourceFile, functions });
-		} else if (ts.isVariableStatement(node) && !hasExportModifier(node)) {
-			handleVariableStatement(node, sourceFile, functions);
+			const funcName = node.name.getText(sourceFile);
+			handleFunctionDeclaration({ name: node.name, node, sourceFile, functions, parentFunction });
+			// Continue traversing with this function as the parent
+			ts.forEachChild(node, (child) => visit(child, funcName));
+			return;
+		}
+		if (ts.isVariableStatement(node) && !hasExportModifier(node)) {
+			// Check if this variable statement contains a function
+			const context: VariableStatementContext = { sourceFile, functions, parentFunction };
+			const funcName = handleVariableStatement(node, context);
+			if (funcName) {
+				// Continue traversing with this function as the parent
+				ts.forEachChild(node, (child) => visit(child, funcName));
+				return;
+			}
 		}
 
-		ts.forEachChild(node, visit);
+		ts.forEachChild(node, (child) => visit(child, parentFunction));
 	}
+}
 
-	visit(sourceFile);
-	return functions;
+interface CallSiteInfo {
+	calledFunction: string;
+	callSite: CallSite;
 }
 
 function buildCallGraph(
 	functions: FunctionInfo[],
 	sourceFile: ts.SourceFile,
-): Map<string, string[]> {
-	const callGraph = new Map<string, string[]>();
+): Map<string, CallSiteInfo[]> {
+	const callGraph = new Map<string, CallSiteInfo[]>();
 	const functionNames = new Set(functions.map((f) => f.name));
 
 	for (const func of functions) {
@@ -70,10 +91,6 @@ function buildCallGraph(
 
 	visit(sourceFile);
 
-	for (const [func, deps] of callGraph) {
-		callGraph.set(func, [...new Set(deps)]);
-	}
-
 	return callGraph;
 
 	function visit(node: ts.Node) {
@@ -81,40 +98,67 @@ function buildCallGraph(
 			const calledFunction = node.expression.getText(sourceFile);
 			if (functionNames.has(calledFunction)) {
 				const container = findContainingFunction(node, sourceFile);
-				recordDependency(calledFunction, container);
+				if (container) {
+					const callSite: CallSite = {
+						line: sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+						column: sourceFile.getLineAndCharacterOfPosition(node.getStart()).character + 1,
+					};
+					recordDependency(calledFunction, container, callSite);
+				}
 			}
 		}
 		ts.forEachChild(node, visit);
 	}
 
-	function recordDependency(calledFunction: string, container: string | null) {
-		if (container) {
-			const deps = callGraph.get(container);
-			if (deps) {
-				deps.push(calledFunction);
-			}
+	function recordDependency(calledFunction: string, container: string, callSite: CallSite) {
+		const deps = callGraph.get(container);
+		if (deps) {
+			deps.push({ calledFunction, callSite });
 		}
 	}
 }
 
 function findViolations(
 	functions: FunctionInfo[],
-	callGraph: Map<string, string[]>,
+	callGraph: Map<string, CallSiteInfo[]>,
 ): StepdownViolation[] {
 	const violations: StepdownViolation[] = [];
+	const topLevelFunctions = functions.filter((f) => f.parentFunction === null);
 
-	for (const func of functions) {
-		const dependencies = callGraph.get(func.name) || [];
-		for (const depName of dependencies) {
-			const depFunc = functions.find((f) => f.name === depName);
-			if (depFunc && depFunc.position.line < func.position.line) {
-				violations.push({
-					file: "",
-					function: func,
-					dependency: depFunc,
-					message: `Stepdown violation: ${func.name} calls ${depName} which appears above it`,
-				});
-			}
+	for (const func of topLevelFunctions) {
+		const violations_for_function = findViolationsForFunction(func, functions, callGraph);
+		violations.push(...violations_for_function);
+	}
+
+	return violations;
+}
+
+function findViolationsForFunction(
+	func: FunctionInfo,
+	functions: FunctionInfo[],
+	callGraph: Map<string, CallSiteInfo[]>,
+): StepdownViolation[] {
+	const violations: StepdownViolation[] = [];
+	const callSites = callGraph.get(func.name) || [];
+
+	for (const { calledFunction, callSite } of callSites) {
+		if (calledFunction === func.name) {
+			continue;
+		}
+
+		const depFunc = functions.find((f) => f.name === calledFunction);
+		if (!depFunc || depFunc.parentFunction !== null) {
+			continue;
+		}
+
+		if (depFunc.position.line < func.position.line) {
+			violations.push({
+				file: "",
+				function: func,
+				dependency: depFunc,
+				message: `Stepdown violation: ${func.name} calls ${calledFunction} which appears above it`,
+				callSite,
+			});
 		}
 	}
 
@@ -145,7 +189,7 @@ function visit(node: ts.Node, context: NestedViolationContext): void {
 	if (ts.isFunctionDeclaration(node) && node.name) {
 		const funcInfo = functionMap.get(node.name.getText(sourceFile));
 		if (funcInfo) {
-			checkFunctionBody(node, funcInfo, context);
+			checkFunctionBodyAndProcess(node, funcInfo, context);
 		}
 	} else if (ts.isVariableStatement(node)) {
 		processVariableStatement(node, context);
@@ -170,77 +214,51 @@ function processVariableStatement(
 		if (isValidArrowFunc && decl.name && decl.initializer) {
 			const funcInfo = functionMap.get(decl.name.getText(sourceFile));
 			if (funcInfo) {
-				checkFunctionBody(decl.initializer as ts.FunctionLikeDeclaration, funcInfo, context);
+				checkFunctionBodyAndProcess(
+					decl.initializer as ts.FunctionLikeDeclaration,
+					funcInfo,
+					context,
+				);
 			}
 		}
 	}
 }
 
-function checkFunctionBody(
-	func: ts.FunctionLikeDeclaration,
-	funcInfo: FunctionInfo,
-	context: NestedViolationContext,
-): void {
-	const { sourceFile } = context;
-	if (!(func.body && ts.isBlock(func.body))) {
-		return;
-	}
-
-	const returnStmt = findReturnStatement(func.body, sourceFile);
-	if (!returnStmt) {
-		return;
-	}
-
-	const returnLine = sourceFile.getLineAndCharacterOfPosition(returnStmt.getStart()).line + 1;
-	processStatements({
-		statements: func.body.statements,
-		parentInfo: funcInfo,
-		returnLine,
-		context,
-	});
-}
-
-function findReturnStatement(node: ts.Node, sourceFile: ts.SourceFile): ts.ReturnStatement | null {
-	if (ts.isReturnStatement(node)) {
-		return node;
-	}
-	for (const child of node.getChildren(sourceFile)) {
-		const result = findReturnStatement(child, sourceFile);
-		if (result) {
-			return result;
-		}
-	}
-	return null;
-}
-
 interface StatementProcessContext {
 	parentInfo: FunctionInfo;
-	returnLine: number;
+	lastLogicLine: number;
+	context: NestedViolationContext;
+}
+
+interface FunctionDeclParams {
+	statement: ts.FunctionDeclaration;
+	parentInfo: FunctionInfo;
+	lastLogicLine: number;
+	context: NestedViolationContext;
+}
+
+interface VariableDeclParams {
+	statement: ts.VariableStatement;
+	parentInfo: FunctionInfo;
+	lastLogicLine: number;
 	context: NestedViolationContext;
 }
 
 function processStatements(
 	params: StatementProcessContext & { statements: ts.NodeArray<ts.Statement> },
 ): void {
-	const { statements, parentInfo, returnLine, context } = params;
+	const { statements, parentInfo, lastLogicLine, context } = params;
 	for (const statement of statements) {
 		if (ts.isFunctionDeclaration(statement)) {
-			processFunctionDeclaration({ statement, parentInfo, returnLine, context });
+			processFunctionDeclaration({ statement, parentInfo, lastLogicLine, context });
 		} else if (ts.isVariableStatement(statement)) {
-			processVariableDeclaration({ statement, parentInfo, returnLine, context });
+			processVariableDeclaration({ statement, parentInfo, lastLogicLine, context });
 		}
 	}
 }
 
-interface FunctionDeclParams {
-	statement: ts.FunctionDeclaration;
-	parentInfo: FunctionInfo;
-	returnLine: number;
-	context: NestedViolationContext;
-}
-
 function processFunctionDeclaration(params: FunctionDeclParams): void {
-	const { statement, parentInfo, returnLine, context } = params;
+	const { statement, parentInfo, lastLogicLine, context } = params;
 	const { sourceFile, functionMap, violations } = context;
 	if (!statement.name) {
 		return;
@@ -255,25 +273,19 @@ function processFunctionDeclaration(params: FunctionDeclParams): void {
 			nestedName,
 			nestedInfo,
 			parentInfo,
-			returnLine,
+			lastLogicLine,
 			violations,
 			sourceFile,
 		});
-		checkFunctionBody(statement, nestedInfo, context);
-	} else if (statement.body) {
-		checkFunctionBody(statement, parentInfo, context);
+	}
+	if (nestedInfo || statement.body) {
+		const targetInfo = nestedInfo || parentInfo;
+		checkFunctionBodyAndProcess(statement, targetInfo, context);
 	}
 }
 
-interface VariableDeclParams {
-	statement: ts.VariableStatement;
-	parentInfo: FunctionInfo;
-	returnLine: number;
-	context: NestedViolationContext;
-}
-
 function processVariableDeclaration(params: VariableDeclParams): void {
-	const { statement, parentInfo, returnLine, context } = params;
+	const { statement, parentInfo, lastLogicLine, context } = params;
 	const { sourceFile, functionMap, violations } = context;
 
 	for (const decl of statement.declarationList.declarations) {
@@ -293,13 +305,76 @@ function processVariableDeclaration(params: VariableDeclParams): void {
 				nestedName,
 				nestedInfo,
 				parentInfo,
-				returnLine,
+				lastLogicLine,
 				violations,
 				sourceFile,
 			});
-			checkFunctionBody(decl.initializer as ts.FunctionLikeDeclaration, nestedInfo, context);
+			checkFunctionBodyAndProcess(
+				decl.initializer as ts.FunctionLikeDeclaration,
+				nestedInfo,
+				context,
+			);
 		}
 	}
+}
+
+function checkFunctionBodyAndProcess(
+	func: ts.FunctionLikeDeclaration,
+	funcInfo: FunctionInfo,
+	context: NestedViolationContext,
+): void {
+	const { sourceFile } = context;
+	if (!(func.body && ts.isBlock(func.body))) {
+		return;
+	}
+
+	const lastLogicLine = findLastLogicStatementLine(func.body.statements, sourceFile);
+	if (lastLogicLine === 0) {
+		return;
+	}
+
+	processStatements({
+		statements: func.body.statements,
+		parentInfo: funcInfo,
+		lastLogicLine,
+		context,
+	});
+}
+
+/**
+ * Find the line number of the last "logic" statement in a block.
+ * Logic statements are any statements that are NOT function declarations or
+ * variable statements containing arrow functions/function expressions.
+ * Returns 0 if no logic statements are found.
+ */
+function findLastLogicStatementLine(
+	statements: ts.NodeArray<ts.Statement>,
+	sourceFile: ts.SourceFile,
+): number {
+	let lastLogicLine = 0;
+
+	for (const statement of statements) {
+		// Skip function declarations - they are not "logic"
+		if (ts.isFunctionDeclaration(statement)) {
+			continue;
+		}
+
+		// Skip variable statements that contain arrow functions or function expressions
+		if (ts.isVariableStatement(statement)) {
+			const hasOnlyFunctionDeclarations = statement.declarationList.declarations.every(
+				(decl) => decl.initializer && isArrowFunctionOrFunctionExpression(decl.initializer),
+			);
+			if (hasOnlyFunctionDeclarations) {
+				continue;
+			}
+		}
+
+		// This is a logic statement - update the last logic line
+		const line = sourceFile.getLineAndCharacterOfPosition(statement.getStart()).line + 1;
+		lastLogicLine = Math.max(lastLogicLine, line);
+	}
+
+	return lastLogicLine;
 }
 
 interface ViolationCheckParams {
@@ -307,69 +382,111 @@ interface ViolationCheckParams {
 	nestedName: string;
 	nestedInfo: FunctionInfo;
 	parentInfo: FunctionInfo;
-	returnLine: number;
+	lastLogicLine: number;
 	violations: NestedFunctionViolation[];
 	sourceFile: ts.SourceFile;
 }
 
 function checkAndAddViolation(params: ViolationCheckParams): void {
-	const { nodeStart, nestedName, nestedInfo, parentInfo, returnLine, violations, sourceFile } =
+	const { nodeStart, nestedName, nestedInfo, parentInfo, lastLogicLine, violations, sourceFile } =
 		params;
 	const nestedLine = sourceFile.getLineAndCharacterOfPosition(nodeStart).line + 1;
 
-	if (nestedLine < returnLine) {
+	// Rule 1: Logic should come before function declarations within any scope
+	// If the nested function declaration appears before the last logic statement, it's a violation
+	if (nestedLine < lastLogicLine) {
 		violations.push({
 			file: "",
 			parent: parentInfo,
 			nested: nestedInfo,
-			message: `Nested function violation: ${nestedName} should appear after return statement in ${parentInfo.name}`,
+			message: `Nested function violation: ${nestedName} should appear after all logic in ${parentInfo.name}`,
 		});
 	}
 }
 
+interface CircularDepsContext {
+	cycles: string[][];
+	visited: Set<string>;
+	recursionStack: Set<string>;
+	path: string[];
+	callGraph: Map<string, CallSiteInfo[]>;
+}
+
+function filterOutCircularViolations(
+	violations: StepdownViolation[],
+	circularDependencies: string[][],
+): StepdownViolation[] {
+	const functionsInCycles = new Set<string>();
+	for (const cycle of circularDependencies) {
+		for (const funcName of cycle) {
+			functionsInCycles.add(funcName);
+		}
+	}
+
+	// Keep only violations where neither function is part of a cycle
+	return violations.filter(
+		(v) => !(functionsInCycles.has(v.function.name) || functionsInCycles.has(v.dependency.name)),
+	);
+}
+
 function detectCircularDependencies(
 	functions: FunctionInfo[],
-	callGraph: Map<string, string[]>,
+	callGraph: Map<string, CallSiteInfo[]>,
 ): string[][] {
-	const cycles: string[][] = [];
-	const visited = new Set<string>();
-	const recursionStack = new Set<string>();
-	const path: string[] = [];
+	const context: CircularDepsContext = {
+		cycles: [],
+		visited: new Set<string>(),
+		recursionStack: new Set<string>(),
+		path: [],
+		callGraph,
+	};
 
-	function dfs(funcName: string): boolean {
-		if (recursionStack.has(funcName)) {
-			const cycleStart = path.indexOf(funcName);
-			cycles.push([...path.slice(cycleStart), funcName]);
-			return true;
+	for (const func of functions) {
+		if (!context.visited.has(func.name)) {
+			dfsDetectCycle(func.name, context);
 		}
+	}
 
-		if (visited.has(funcName)) {
-			return false;
+	return context.cycles;
+}
+
+function dfsDetectCycle(funcName: string, context: CircularDepsContext): boolean {
+	if (context.recursionStack.has(funcName)) {
+		const cycle = extractCycle(funcName, context);
+		if (isValidCycle(cycle)) {
+			context.cycles.push(cycle);
 		}
+		return true;
+	}
 
-		visited.add(funcName);
-		recursionStack.add(funcName);
-		path.push(funcName);
-
-		const dependencies = callGraph.get(funcName) || [];
-		for (const dep of dependencies) {
-			if (dfs(dep)) {
-				return true;
-			}
-		}
-
-		recursionStack.delete(funcName);
-		path.pop();
+	if (context.visited.has(funcName)) {
 		return false;
 	}
 
-	for (const func of functions) {
-		if (!visited.has(func.name)) {
-			dfs(func.name);
+	context.visited.add(funcName);
+	context.recursionStack.add(funcName);
+	context.path.push(funcName);
+
+	const callSites = context.callGraph.get(funcName) || [];
+	for (const { calledFunction } of callSites) {
+		if (dfsDetectCycle(calledFunction, context)) {
+			return true;
 		}
 	}
 
-	return cycles;
+	context.recursionStack.delete(funcName);
+	context.path.pop();
+	return false;
+}
+
+function extractCycle(funcName: string, context: CircularDepsContext): string[] {
+	const cycleStart = context.path.indexOf(funcName);
+	return [...context.path.slice(cycleStart), funcName];
+}
+
+function isValidCycle(cycle: string[]): boolean {
+	// Skip self-recursive cycles (e.g., "A → A → A")
+	return cycle.length > 2 || (cycle.length === 2 && cycle[0] !== cycle[1]);
 }
 
 async function resolveFiles(patterns: string[], ignorePatterns: string[]): Promise<string[]> {
@@ -390,11 +507,13 @@ function handleFunctionDeclaration({
 	node,
 	sourceFile,
 	functions,
+	parentFunction,
 }: {
 	name: ts.Identifier;
 	node: ts.FunctionDeclaration;
 	sourceFile: ts.SourceFile;
 	functions: FunctionInfo[];
+	parentFunction: string | null;
 }): void {
 	const functionInfo: FunctionInfo = {
 		name: name.getText(sourceFile),
@@ -408,32 +527,56 @@ function handleFunctionDeclaration({
 		isExported: hasExportModifier(node),
 		dependencies: [],
 		canBeFunctionDeclaration: true,
+		parentFunction,
 	};
 	functions.push(functionInfo);
 }
 
+interface VariableStatementContext {
+	sourceFile: ts.SourceFile;
+	functions: FunctionInfo[];
+	parentFunction: string | null;
+}
+
 function handleVariableStatement(
 	node: ts.VariableStatement,
-	sourceFile: ts.SourceFile,
-	functions: FunctionInfo[],
-): void {
+	context: VariableStatementContext,
+): string | null {
 	const { declarationList } = node;
+	let firstFuncName: string | null = null;
 	for (const declaration of declarationList.declarations) {
-		if (declaration.initializer && isArrowFunctionOrFunctionExpression(declaration.initializer)) {
-			const functionInfo = createVariableFunctionInfo(declaration, sourceFile, node);
-			if (functionInfo) {
-				functions.push(functionInfo);
-			}
+		const funcName = extractVariableFunction(declaration, node, context);
+		if (funcName && !firstFuncName) {
+			firstFuncName = funcName;
 		}
 	}
+	return firstFuncName;
+}
+
+function extractVariableFunction(
+	declaration: ts.VariableDeclaration,
+	node: ts.VariableStatement,
+	context: VariableStatementContext,
+): string | null {
+	if (!(declaration.initializer && isArrowFunctionOrFunctionExpression(declaration.initializer))) {
+		return null;
+	}
+
+	const functionInfo = createVariableFunctionInfo(declaration, node, context);
+	if (!functionInfo) {
+		return null;
+	}
+
+	context.functions.push(functionInfo);
+	return functionInfo.name;
 }
 
 function createVariableFunctionInfo(
 	declaration: ts.VariableDeclaration,
-	sourceFile: ts.SourceFile,
 	node: ts.VariableStatement,
+	context: VariableStatementContext,
 ): FunctionInfo | null {
-	const name = declaration.name?.getText(sourceFile);
+	const name = declaration.name?.getText(context.sourceFile);
 	if (!(name && declaration.initializer)) {
 		return null;
 	}
@@ -442,8 +585,8 @@ function createVariableFunctionInfo(
 		name,
 		kind: ts.isArrowFunction(declaration.initializer) ? "arrow-function" : "function-expression",
 		position: {
-			line: sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1,
-			column: sourceFile.getLineAndCharacterOfPosition(node.getStart()).character + 1,
+			line: context.sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1,
+			column: context.sourceFile.getLineAndCharacterOfPosition(node.getStart()).character + 1,
 			start: node.getStart(),
 			end: node.getEnd(),
 		},
@@ -452,9 +595,10 @@ function createVariableFunctionInfo(
 		canBeFunctionDeclaration: isArrowFunctionOrFunctionExpression(declaration.initializer)
 			? canConvertToFunctionDeclaration(
 					declaration.initializer as ts.FunctionLikeDeclaration,
-					sourceFile,
+					context.sourceFile,
 				)
 			: false,
+		parentFunction: context.parentFunction,
 	};
 	return functionInfo;
 }
@@ -547,15 +691,15 @@ function checkVariableDeclaration(
 function collectSourceFileFunctionNames(sourceFile: ts.SourceFile): Set<string> {
 	const functionNames = new Set<string>();
 
+	visit(sourceFile);
+	return functionNames;
+
 	function visit(node: ts.Node) {
 		if (ts.isFunctionDeclaration(node) && node.name) {
 			functionNames.add(node.name.getText(sourceFile));
 		}
 		ts.forEachChild(node, visit);
 	}
-
-	visit(sourceFile);
-	return functionNames;
 }
 
 function hasNoThisKeyword(node: ts.Node): boolean {
