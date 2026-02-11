@@ -65,6 +65,9 @@ stepdown-rule "src/**/*.ts" "lib/**/*.ts"
 # Auto-fix violations
 stepdown-rule --fix
 
+# Show circular dependencies (verbose mode)
+stepdown-rule --verbose
+
 # JSON output for CI
 stepdown-rule --json --output-file results.json
 
@@ -112,7 +115,32 @@ function hashPassword(password: string): string {
 }
 ```
 
-The rule: if function A calls function B, then A should appear before B in the file.
+The rule: within a scope, scope logic comes before subfunction declarations, and if function A calls function B, then A should appear before B in the file.
+
+## How It Works
+
+The analyzer reports **only actionable violations** - violations that can be fixed by reordering code. Violations involving functions in circular dependency cycles are excluded from reporting because reordering cannot fix them; they require refactoring.
+
+### What Gets Reported
+
+✅ **Reported**: Functions that call other functions appearing below them
+- These can be fixed by moving the caller after the callee
+
+❌ **Not Reported**: Functions involved in circular dependencies
+- Example: `funcA → funcB → funcA` (mutual recursion)
+- These require architectural changes, not reordering
+- Often appear in tree traversal algorithms, mutual recursion patterns, or interconnected systems
+
+### Circular Dependencies
+
+Circular dependencies are always detected and reported separately. To understand what's creating cycles in your code:
+
+```bash
+stepdown-rule src/analyzer.ts
+# Output shows both violations (fixable) and circular dependencies (architectural)
+```
+
+Circular dependencies do NOT prevent the fixer from running, but files with circular dependencies cannot be auto-fixed since reordering won't resolve them.
 
 ## Configuration
 
@@ -141,6 +169,7 @@ Create a `.stepdownrc.json` file:
 
 - `patterns` - File patterns to analyze (default: `src/**/*.ts`)
 - `--fix` - Automatically fix violations by reordering functions
+- `--verbose` - Show circular dependencies in output (only actionable violations shown by default)
 - `--json` - Output results in JSON format
 - `--output-file <file>` - Write JSON output to file
 - `--ignore <patterns...>` - Additional ignore patterns
