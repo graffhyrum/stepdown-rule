@@ -1,5 +1,5 @@
 // Multiple nested DECLARATIONS before return - VIOLATIONS
-export function orchestrator() {
+export function _orchestrator() {
 	const helperOne = () => "help1";
 
 	const helperTwo = () => "help2";
