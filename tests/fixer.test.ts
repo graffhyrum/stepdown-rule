@@ -84,6 +84,26 @@ function main() {
 	cleanupTestDir();
 });
 
+test("should fix arrow const chain (27g): mapValidOrders/parseSingleOrder call validateAndParseOrder", async () => {
+	setupTestDir();
+	const filePath = createTestFile(
+		"test-arrow-chain.ts",
+		readFileSync("fixtures/test-arrow-chain.ts", "utf-8"),
+	);
+
+	const results = await fixFiles([filePath], defaultConfig);
+
+	expect(results).toHaveLength(1);
+	expect(results[0]?.fixed).toBe(true);
+	expect(results[0]?.errors).toHaveLength(0);
+
+	const { analyzeFiles } = await import("../src/analyzer");
+	const [analysis] = await analyzeFiles([filePath], defaultConfig);
+	expect(analysis?.violations.length).toBe(0);
+
+	cleanupTestDir();
+});
+
 test("should not modify files with no violations", async () => {
 	setupTestDir();
 

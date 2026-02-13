@@ -52,12 +52,8 @@ Assignments for parallel subagent execution. Each subagent MUST:
 ### stepdown-rule-aka - Fixer7: Fixer only processes sourceFile direct children — DONE
 - **Completed**: transformNestedBlocks reorders functions inside ArrowFunction/FunctionExpression/FunctionDeclaration bodies
 
-### stepdown-rule-db8 - Fixer5: Nested/inline functions inside .derive() blocks not detected
-- **Category**: `coding`
-- **Skills**: `subagent-workflow`
-- **Prompt**:
-  Analyzer's `extractFunctions` (analyzer.ts 52-79) only looks at top-level. Functions inside `.derive()`, `.on()`, `.decorate()` callbacks are nested and not captured. Extend `visit()` to descend into call expression arguments when they contain function bodies. Example: session.ts line 39, ensureSessionCookie inside .derive(). Related: Fixer7 (aka) - fixer must also traverse these; consider fixing aka first for full pipeline.
-- **Acceptance**: Analyzer reports violations for nested functions; fixer can reorder if aka is fixed.
+### stepdown-rule-db8 - Fixer5: Nested/inline functions inside .derive() blocks — DONE
+- **Completed**: analyzer already descends into call args; fixer (aka) reorders nested blocks. Tests added.
 
 ### stepdown-rule-obe - Fixer4: Exported vs non-exported variable functions inconsistent — DONE
 - **Completed**: removed hasExportModifier filter in extractFunctions, set isExported in createVariableFunctionInfo

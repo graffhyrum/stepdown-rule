@@ -85,6 +85,28 @@ test("should not flag nested function when referenced in logic", async () => {
 	expect(result.nestedFunctionViolations.length).toBe(0);
 });
 
+test("should detect and fix stepdown in .derive() callback (db8/aka)", async () => {
+	const code = `
+const sessionPlugin = { derive: (fn: () => unknown) => fn() }.derive(() => {
+  const getSessionId = () => "id";
+  const ensureSessionCookie = () => getSessionId();
+  return { getSessionId, ensureSessionCookie };
+});
+`;
+	const tempFile = "/tmp/test-derive-callback.ts";
+	await Bun.write(tempFile, code);
+
+	const [before] = await analyzeFiles([tempFile], config);
+	expect(before?.violations.length).toBeGreaterThan(0);
+	expect(before?.violations.some((v) => v.dependency.name === "getSessionId")).toBe(true);
+
+	const { fixFiles } = await import("../src/fixer");
+	await fixFiles([tempFile], { ...config, fix: true, json: false, outputFile: undefined });
+
+	const [after] = await analyzeFiles([tempFile], config);
+	expect(after?.violations.length).toBe(0);
+});
+
 function assertDefined<T>(x: T): asserts x is NonNullable<T> {
 	expect(x).toBeDefined();
 }
