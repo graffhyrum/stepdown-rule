@@ -372,8 +372,11 @@ function buildDependencyGraph(
 
 	for (const { node } of functions) {
 		const name = extractFunctionName(node, sourceFile);
+		if (name) functionNames.set(name, node);
+	}
+	for (const { node } of functions) {
+		const name = extractFunctionName(node, sourceFile);
 		if (name) {
-			functionNames.set(name, node);
 			const deps = extractDependenciesFor(node, sourceFile, functionNames);
 			dependencies.set(name, deps);
 		}

@@ -124,6 +124,36 @@ test("should fix arrow const chain (27g): mapValidOrders/parseSingleOrder call v
 	cleanupTestDir();
 });
 
+test("27g: order-repo style - factory first, arrow consts ordered by stepdown (caller above callee)", async () => {
+	setupTestDir();
+	const filePath = createTestFile(
+		"test-order-repo-27g.ts",
+		readFileSync("fixtures/test-order-repo-27g.ts", "utf-8"),
+	);
+
+	const results = await fixFiles([filePath], defaultConfig);
+
+	expect(results).toHaveLength(1);
+	expect(results[0]?.fixed).toBe(true);
+	expect(results[0]?.errors).toHaveLength(0);
+
+	const { analyzeFiles } = await import("../src/analyzer");
+	const [analysis] = await analyzeFiles([filePath], defaultConfig);
+	expect(analysis?.violations.length).toBe(0);
+
+	const fixedContent = readFileSync(filePath, "utf-8");
+	const createIdx = fixedContent.indexOf("function createSurrealOrderRepository");
+	const mapIdx = fixedContent.indexOf("const mapValidOrders");
+	const parseIdx = fixedContent.indexOf("const parseSingleOrder");
+	const validateIdx = fixedContent.indexOf("function validateAndParseOrder");
+	expect(createIdx).toBeLessThan(mapIdx);
+	expect(createIdx).toBeLessThan(parseIdx);
+	expect(mapIdx).toBeLessThan(validateIdx);
+	expect(parseIdx).toBeLessThan(validateIdx);
+
+	cleanupTestDir();
+});
+
 test("should not modify files with no violations", async () => {
 	setupTestDir();
 

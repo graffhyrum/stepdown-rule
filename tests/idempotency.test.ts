@@ -225,12 +225,13 @@ const c = () => "leaf";
 	cleanupTestDir();
 });
 
-test("96h/1e0: bead fixtures (mutual-pairs, cart, topo, arrow-chain, factory-refs, rate-limit, container-di, factory-method-calls) must converge", async () => {
+test("96h/1e0/27g: bead fixtures (mutual-pairs, cart, topo, arrow-chain, order-repo-27g, factory-refs, rate-limit, container-di, factory-method-calls) must converge", async () => {
 	const fixtures = [
 		"fixtures/test-mutual-pairs.ts",
 		"fixtures/test-cart-pingpong.ts",
 		"fixtures/test-topo-order-sensitive.ts",
 		"fixtures/test-arrow-chain.ts",
+		"fixtures/test-order-repo-27g.ts",
 		"fixtures/test-factory-refs.ts",
 		"fixtures/test-rate-limit-pattern.ts",
 		"fixtures/test-container-di.ts",
