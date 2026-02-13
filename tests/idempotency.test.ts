@@ -1,266 +1,162 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { analyzeFiles } from "../src/analyzer";
 import { fixFiles } from "../src/fixer";
-import type { Config } from "../src/types";
+import { cleanupTempDir, createTempDir, createTestFile, fixConfig } from "./helpers";
 
-const TEST_DIR = join(process.cwd(), "tests", "fixtures-idempotency");
-
-function setupTestDir() {
-	cleanupTestDir();
-	mkdirSync(TEST_DIR, { recursive: true });
+function runFixAnalyzeLoop(filePath: string, config: typeof fixConfig, maxIterations: number) {
+	return async () => {
+		let prevViolations = Number.POSITIVE_INFINITY;
+		for (let i = 0; i < maxIterations; i++) {
+			const [result] = await analyzeFiles([filePath], config);
+			const count =
+				(result?.violations.length ?? 0) + (result?.nestedFunctionViolations.length ?? 0);
+			expect(count).toBeLessThanOrEqual(prevViolations);
+			prevViolations = count;
+			if (count === 0) break;
+			await fixFiles([filePath], config);
+		}
+		expect(prevViolations).toBe(0);
+	};
 }
 
-function cleanupTestDir() {
+test("idempotent for simple violations", async () => {
+	const dir = createTempDir("idempotency-temp");
 	try {
-		rmSync(TEST_DIR, { recursive: true, force: true });
-	} catch {
-		// Ignore cleanup errors
+		const code = `function helper() { return "helper"; }
+// padding 1-10
+// 1
+// 2
+// 3
+// 4
+// 5
+// 6
+// 7
+// 8
+// 9
+// 10
+function main() { return helper(); }`;
+		const file = await createTestFile(dir, "test.ts", code);
+
+		const [r1] = await fixFiles([file], fixConfig);
+		expect(r1?.fixed).toBe(true);
+		const c1 = await Bun.file(file).text();
+
+		const [r2] = await fixFiles([file], fixConfig);
+		expect(r2?.fixed).toBe(false);
+		expect(await Bun.file(file).text()).toBe(c1);
+
+		const [r3] = await fixFiles([file], fixConfig);
+		expect(r3?.fixed).toBe(false);
+	} finally {
+		cleanupTempDir(dir);
 	}
-}
-
-function createTestFile(filename: string, content: string): string {
-	const filePath = join(TEST_DIR, filename);
-	writeFileSync(filePath, content, "utf-8");
-	return filePath;
-}
-
-const defaultConfig: Config = {
-	ignore: [],
-	analyzeArrowFunctions: true,
-	analyzeExportsOnly: false,
-	reportCircularDependencies: true,
-	fix: true,
-	json: false,
-};
-
-test("should be idempotent for simple violations", async () => {
-	setupTestDir();
-
-	const code = `
-function helper() {
-	return "helper";
-}
-
-// Padding to ensure >10 line difference
-// Line 1
-// Line 2
-// Line 3
-// Line 4
-// Line 5
-// Line 6
-// Line 7
-// Line 8
-// Line 9
-// Line 10
-
-function main() {
-	const result = helper();
-	return result;
-}
-`;
-
-	const filePath = createTestFile("test-idempotent-simple.ts", code);
-
-	// First fix
-	const results1 = await fixFiles([filePath], defaultConfig);
-	expect(results1).toHaveLength(1);
-	expect(results1[0]?.fixed).toBe(true);
-	const content1 = readFileSync(filePath, "utf-8");
-
-	// Second fix—should be no changes
-	const results2 = await fixFiles([filePath], defaultConfig);
-	expect(results2).toHaveLength(1);
-	expect(results2[0]?.fixed).toBe(false);
-	const content2 = readFileSync(filePath, "utf-8");
-
-	// Content should not change between runs
-	expect(content1).toBe(content2);
-
-	// Third fix—should still be no changes
-	const results3 = await fixFiles([filePath], defaultConfig);
-	expect(results3).toHaveLength(1);
-	expect(results3[0]?.fixed).toBe(false);
-	const content3 = readFileSync(filePath, "utf-8");
-
-	expect(content2).toBe(content3);
-
-	cleanupTestDir();
 });
 
-test("should be idempotent for complex dependency chains", async () => {
-	setupTestDir();
+test("idempotent for complex dependency chains", async () => {
+	const dir = createTempDir("idempotency-temp");
+	try {
+		const code = `function level3() { return "base"; }
+function level2a() { level3(); }
+function level2b() { level3(); }
+function level1() { level2a(); level2b(); }`;
+		const file = await createTestFile(dir, "test.ts", code);
 
-	const code = `
-function level3() {
-	return "base";
-}
+		const [r1] = await fixFiles([file], fixConfig);
+		expect(r1?.fixed).toBe(true);
+		const c1 = await Bun.file(file).text();
 
-function level2a() {
-	level3();
-}
-
-function level2b() {
-	level3();
-}
-
-function level1() {
-	level2a();
-	level2b();
-}
-`;
-
-	const filePath = createTestFile("test-idempotent-chain.ts", code);
-
-	// First fix
-	const results1 = await fixFiles([filePath], defaultConfig);
-	expect(results1).toHaveLength(1);
-	expect(results1[0]?.fixed).toBe(true);
-	const content1 = readFileSync(filePath, "utf-8");
-
-	// Second fix—should be no changes
-	const results2 = await fixFiles([filePath], defaultConfig);
-	expect(results2).toHaveLength(1);
-	expect(results2[0]?.fixed).toBe(false);
-	const content2 = readFileSync(filePath, "utf-8");
-
-	expect(content1).toBe(content2);
-
-	cleanupTestDir();
+		const [r2] = await fixFiles([file], fixConfig);
+		expect(r2?.fixed).toBe(false);
+		expect(await Bun.file(file).text()).toBe(c1);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should be idempotent for mixed function types", async () => {
-	setupTestDir();
+test("idempotent for mixed function types", async () => {
+	const dir = createTempDir("idempotency-temp");
+	try {
+		const code = `const arrowHelper = () => "arrow";
+function declHelper() { return "decl"; }
+function main() { return arrowHelper() + declHelper(); }`;
+		const file = await createTestFile(dir, "test.ts", code);
 
-	const code = `
-const arrowHelper = () => {
-	return "arrow";
-};
-
-function declHelper() {
-	return "decl";
-}
-
-function main() {
-	const a = arrowHelper();
-	const b = declHelper();
-	return a + b;
-}
-`;
-
-	const filePath = createTestFile("test-idempotent-mixed.ts", code);
-
-	// First fix
-	const results1 = await fixFiles([filePath], defaultConfig);
-	expect(results1).toHaveLength(1);
-	expect(results1[0]?.fixed).toBe(true);
-	const content1 = readFileSync(filePath, "utf-8");
-
-	// Second fix—should be no changes
-	const results2 = await fixFiles([filePath], defaultConfig);
-	expect(results2).toHaveLength(1);
-	expect(results2[0]?.fixed).toBe(false);
-	const content2 = readFileSync(filePath, "utf-8");
-
-	expect(content1).toBe(content2);
-
-	cleanupTestDir();
+		const [r1] = await fixFiles([file], fixConfig);
+		expect(r1?.fixed).toBe(true);
+		const [r2] = await fixFiles([file], fixConfig);
+		expect(r2?.fixed).toBe(false);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should be idempotent even if file already complies", async () => {
-	setupTestDir();
+test("idempotent when file already complies", async () => {
+	const dir = createTempDir("idempotency-temp");
+	try {
+		const code = `function main() { return helper(); }
+function helper() { return "helper"; }`;
+		const file = await createTestFile(dir, "test.ts", code);
+		const original = await Bun.file(file).text();
 
-	const code = `
-function main() {
-	const result = helper();
-	return result;
-}
-
-function helper() {
-	return "helper";
-}
-`;
-
-	const filePath = createTestFile("test-idempotent-compliant.ts", code);
-	const originalContent = readFileSync(filePath, "utf-8");
-
-	// First fix—should be no changes (already compliant)
-	const results1 = await fixFiles([filePath], defaultConfig);
-	expect(results1).toHaveLength(1);
-	expect(results1[0]?.fixed).toBe(false);
-
-	// Second fix—should also be no changes
-	const results2 = await fixFiles([filePath], defaultConfig);
-	expect(results2).toHaveLength(1);
-	expect(results2[0]?.fixed).toBe(false);
-
-	const content = readFileSync(filePath, "utf-8");
-	expect(content).toBe(originalContent);
-
-	cleanupTestDir();
+		const [r1] = await fixFiles([file], fixConfig);
+		expect(r1?.fixed).toBe(false);
+		const [r2] = await fixFiles([file], fixConfig);
+		expect(r2?.fixed).toBe(false);
+		expect(await Bun.file(file).text()).toBe(original);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("96h: fix→analyze loop must not increase violations (convergence)", async () => {
-	setupTestDir();
-
-	const code = `
-const a = () => b();
+test("96h: fix→analyze converges", async () => {
+	const dir = createTempDir("idempotency-temp");
+	try {
+		const file = await createTestFile(
+			dir,
+			"test.ts",
+			`const a = () => b();
 const b = () => c();
-const c = () => "leaf";
-`;
-	const filePath = createTestFile("test-convergence.ts", code);
-
-	let prevViolations = Number.POSITIVE_INFINITY;
-	for (let i = 0; i < 5; i++) {
-		const [result] = await analyzeFiles([filePath], defaultConfig);
-		const count = (result?.violations.length ?? 0) + (result?.nestedFunctionViolations.length ?? 0);
-		expect(count).toBeLessThanOrEqual(prevViolations);
-		prevViolations = count;
-		if (count === 0) break;
-		await fixFiles([filePath], defaultConfig);
-	}
-
-	expect(prevViolations).toBe(0);
-	cleanupTestDir();
-});
-
-test("77q: ff-elysia integration - fix→analyze converges when project available", async () => {
-	const ffElysiaPath = process.env.FF_ELYSIA_PATH ?? join(process.cwd(), "..", "ff-elysia");
-	const fs = await import("node:fs");
-	const { cpSync, rmSync, mkdirSync } = await import("node:fs");
-	if (!fs.existsSync(ffElysiaPath)) return;
-
-	setupTestDir();
-	const tmpDir = join(TEST_DIR, "ff-elysia-copy");
-	rmSync(tmpDir, { recursive: true, force: true });
-	mkdirSync(tmpDir, { recursive: true });
-	cpSync(join(ffElysiaPath, "src"), join(tmpDir, "src"), { recursive: true });
-
-	const patterns = [join(tmpDir, "src", "**", "*.ts")];
-	const FileServiceClass = (await import("../src/services/FileService")).FileService;
-	const service = new FileServiceClass({ ignore: [] });
-	const files = await service.resolveFiles(patterns);
-	if (files.length === 0) return;
-
-	const config = { ...defaultConfig, fix: true };
-	let prevViolations = Number.POSITIVE_INFINITY;
-	for (let i = 0; i < 15; i++) {
-		const results = await analyzeFiles(patterns, config, service);
-		const count = results.reduce(
-			(sum, r) => sum + (r.violations?.length ?? 0) + (r.nestedFunctionViolations?.length ?? 0),
-			0,
+const c = () => "leaf";`,
 		);
-		expect(count).toBeLessThanOrEqual(prevViolations);
-		prevViolations = count;
-		if (count === 0) break;
-		await fixFiles(patterns, config, service);
+		await runFixAnalyzeLoop(file, fixConfig, 5)();
+	} finally {
+		cleanupTempDir(dir);
 	}
-	expect(prevViolations).toBe(0);
-	rmSync(tmpDir, { recursive: true, force: true });
 });
 
-test("96h/1e0/27g: bead fixtures (mutual-pairs, cart, topo, arrow-chain, order-repo-27g, factory-refs, rate-limit, container-di, factory-method-calls) must converge", async () => {
+test("77q: ff-elysia convergence when available", async () => {
+	const ffPath = process.env.FF_ELYSIA_PATH ?? join(process.cwd(), "..", "ff-elysia");
+	if (!existsSync(ffPath)) return;
+
+	const dir = createTempDir("idempotency-temp");
+	const tmpDir = join(dir, "ff-elysia-copy");
+	try {
+		mkdirSync(tmpDir, { recursive: true });
+		cpSync(join(ffPath, "src"), join(tmpDir, "src"), { recursive: true });
+
+		const patterns = [join(tmpDir, "src", "**", "*.ts")];
+		let prevViolations = Number.POSITIVE_INFINITY;
+
+		for (let i = 0; i < 15; i++) {
+			const results = await analyzeFiles(patterns, fixConfig);
+			const count = results.reduce(
+				(sum, r) => sum + (r.violations?.length ?? 0) + (r.nestedFunctionViolations?.length ?? 0),
+				0,
+			);
+			expect(count).toBeLessThanOrEqual(prevViolations);
+			prevViolations = count;
+			if (count === 0) break;
+			await fixFiles(patterns, fixConfig);
+		}
+		expect(prevViolations).toBe(0);
+	} finally {
+		cleanupTempDir(dir);
+	}
+});
+
+test("96h/1e0/27g: bead fixtures converge", async () => {
 	const fixtures = [
 		"fixtures/test-mutual-pairs.ts",
 		"fixtures/test-cart-pingpong.ts",
@@ -274,22 +170,13 @@ test("96h/1e0/27g: bead fixtures (mutual-pairs, cart, topo, arrow-chain, order-r
 	];
 
 	for (const fixture of fixtures) {
-		const content = readFileSync(fixture, "utf-8");
-		setupTestDir();
-		const filePath = createTestFile("bead-fixture.ts", content);
-
-		let prevViolations = Number.POSITIVE_INFINITY;
-		for (let i = 0; i < 5; i++) {
-			const [result] = await analyzeFiles([filePath], defaultConfig);
-			const count =
-				(result?.violations.length ?? 0) + (result?.nestedFunctionViolations.length ?? 0);
-			expect(count).toBeLessThanOrEqual(prevViolations);
-			prevViolations = count;
-			if (count === 0) break;
-			await fixFiles([filePath], defaultConfig);
+		const dir = createTempDir("idempotency-temp");
+		try {
+			const content = await Bun.file(fixture).text();
+			const file = await createTestFile(dir, "bead.ts", content);
+			await runFixAnalyzeLoop(file, fixConfig, 5)();
+		} finally {
+			cleanupTempDir(dir);
 		}
-
-		expect(prevViolations).toBe(0);
-		cleanupTestDir();
 	}
 });

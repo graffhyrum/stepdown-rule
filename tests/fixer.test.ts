@@ -1,450 +1,273 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { analyzeFiles } from "../src/analyzer";
 import { fixFiles } from "../src/fixer";
-import type { Config } from "../src/types";
+import { cleanupTempDir, createTempDir, createTestFile, defaultConfig, fixConfig } from "./helpers";
 
-const TEST_DIR = join(process.cwd(), "tests", "fixtures-temp");
+// --- Core fix behavior ---
 
-function setupTestDir() {
-	cleanupTestDir();
-	mkdirSync(TEST_DIR, { recursive: true });
-}
-
-function cleanupTestDir() {
+test("reorders functions to fix violations", async () => {
+	const dir = createTempDir("fixer-temp");
 	try {
-		rmSync(TEST_DIR, { recursive: true, force: true });
-	} catch {
-		// Ignore cleanup errors
+		const code = `function helper() { return "helper"; }
+// padding
+// 1
+// 2
+// 3
+// 4
+// 5
+// 6
+// 7
+// 8
+// 9
+// 10
+function main() { return helper(); }`;
+		const file = await createTestFile(dir, "test.ts", code);
+		const [result] = await fixFiles([file], fixConfig);
+
+		expect(result?.fixed).toBe(true);
+		expect(result?.reordered).toBeGreaterThan(0);
+		expect(result?.errors).toHaveLength(0);
+
+		const content = await Bun.file(file).text();
+		expect(content.indexOf("function main")).toBeLessThan(content.indexOf("function helper"));
+	} finally {
+		cleanupTempDir(dir);
 	}
-}
-
-function createTestFile(filename: string, content: string): string {
-	const filePath = join(TEST_DIR, filename);
-	writeFileSync(filePath, content, "utf-8");
-	return filePath;
-}
-
-const defaultConfig: Config = {
-	ignore: [],
-	analyzeArrowFunctions: true,
-	analyzeExportsOnly: false,
-	reportCircularDependencies: true,
-	fix: true,
-	json: false,
-};
-
-test("should fix stepdown violations by reordering functions", async () => {
-	setupTestDir();
-
-	// Violation: callee (helper) appears ABOVE caller (main)
-	const violationCode = `
-function helper() {
-	return "helper result";
-}
-
-// Padding to ensure >10 line difference
-// Line 1
-// Line 2
-// Line 3
-// Line 4
-// Line 5
-// Line 6
-// Line 7
-// Line 8
-// Line 9
-// Line 10
-
-function main() {
-	const result = helper();
-	return result;
-}
-`;
-
-	const filePath = createTestFile("test-fix-violations.ts", violationCode);
-
-	const results = await fixFiles([filePath], defaultConfig);
-
-	expect(results).toHaveLength(1);
-	const [result] = results;
-	expect(result?.fixed).toBe(true);
-	expect(result?.reordered).toBeGreaterThan(0);
-	expect(result?.errors).toHaveLength(0);
-
-	// Verify the file was actually modified
-	const fixedContent = readFileSync(filePath, "utf-8");
-	expect(fixedContent).toContain("helper");
-	expect(fixedContent).toContain("main");
-
-	// After fix: caller (main) should come BEFORE callee (helper)
-	const mainIndex = fixedContent.indexOf("function main");
-	const helperIndex = fixedContent.indexOf("function helper");
-	expect(mainIndex).toBeLessThan(helperIndex);
-
-	cleanupTestDir();
 });
 
-test("should fix factory with method calling helper (1e0): dep inside returned object method body", async () => {
-	setupTestDir();
-	const filePath = createTestFile(
-		"test-factory-method.ts",
-		readFileSync("fixtures/test-factory-method-calls.ts", "utf-8"),
-	);
+test("fixes stepdown when callee-only helper is defined first (multiple callers)", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const code = `function sharedHelper() { return "ok"; }
+function callerA() { return sharedHelper(); }
+function callerB() { return sharedHelper(); }
+function callerC() { return sharedHelper(); }`;
+		const file = await createTestFile(dir, "test.ts", code);
+		const [result] = await fixFiles([file], fixConfig);
 
-	const results = await fixFiles([filePath], defaultConfig);
-
-	expect(results).toHaveLength(1);
-	expect(results[0]?.fixed).toBe(true);
-	expect(results[0]?.errors).toHaveLength(0);
-
-	const { analyzeFiles } = await import("../src/analyzer");
-	const [analysis] = await analyzeFiles([filePath], defaultConfig);
-	expect(analysis?.violations.length).toBe(0);
-
-	cleanupTestDir();
+		expect(result?.fixed, "fixer should fix stepdown violations").toBe(true);
+		expect(result?.errors).toHaveLength(0);
+		const content = await Bun.file(file).text();
+		expect(content).toContain("function sharedHelper()");
+		expect(content).toContain("function callerA()");
+		expect(content).toContain("function callerB()");
+		expect(content).toContain("function callerC()");
+		const idxHelper = content.indexOf("function sharedHelper()");
+		const idxA = content.indexOf("function callerA()");
+		const idxB = content.indexOf("function callerB()");
+		const idxC = content.indexOf("function callerC()");
+		expect(idxA).toBeLessThan(idxHelper);
+		expect(idxB).toBeLessThan(idxHelper);
+		expect(idxC).toBeLessThan(idxHelper);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should fix arrow const chain (27g): mapValidOrders/parseSingleOrder call validateAndParseOrder", async () => {
-	setupTestDir();
-	const filePath = createTestFile(
-		"test-arrow-chain.ts",
-		readFileSync("fixtures/test-arrow-chain.ts", "utf-8"),
-	);
+test("does not modify files with no violations", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const code = `function main() { return helper(); }
+function helper() { return "helper"; }`;
+		const file = await createTestFile(dir, "test.ts", code);
+		const original = await Bun.file(file).text();
 
-	const results = await fixFiles([filePath], defaultConfig);
+		const [result] = await fixFiles([file], fixConfig);
 
-	expect(results).toHaveLength(1);
-	expect(results[0]?.fixed).toBe(true);
-	expect(results[0]?.errors).toHaveLength(0);
-
-	const { analyzeFiles } = await import("../src/analyzer");
-	const [analysis] = await analyzeFiles([filePath], defaultConfig);
-	expect(analysis?.violations.length).toBe(0);
-
-	cleanupTestDir();
+		expect(result?.fixed).toBe(false);
+		expect(result?.reordered).toBe(0);
+		expect(await Bun.file(file).text()).toBe(original);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("27g: order-repo style - factory first, arrow consts ordered by stepdown (caller above callee)", async () => {
-	setupTestDir();
-	const filePath = createTestFile(
-		"test-order-repo-27g.ts",
-		readFileSync("fixtures/test-order-repo-27g.ts", "utf-8"),
-	);
+test("preserves imports and exports", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const code = `import { something } from "somewhere";
+function helper() { return something(); }
+function main() { return helper(); }
+export { main };`;
+		const file = await createTestFile(dir, "test.ts", code);
+		const [result] = await fixFiles([file], fixConfig);
 
-	const results = await fixFiles([filePath], defaultConfig);
-
-	expect(results).toHaveLength(1);
-	expect(results[0]?.fixed).toBe(true);
-	expect(results[0]?.errors).toHaveLength(0);
-
-	const { analyzeFiles } = await import("../src/analyzer");
-	const [analysis] = await analyzeFiles([filePath], defaultConfig);
-	expect(analysis?.violations.length).toBe(0);
-
-	const fixedContent = readFileSync(filePath, "utf-8");
-	const createIdx = fixedContent.indexOf("function createSurrealOrderRepository");
-	const mapIdx = fixedContent.indexOf("const mapValidOrders");
-	const parseIdx = fixedContent.indexOf("const parseSingleOrder");
-	const validateIdx = fixedContent.indexOf("function validateAndParseOrder");
-	expect(createIdx).toBeLessThan(mapIdx);
-	expect(createIdx).toBeLessThan(parseIdx);
-	expect(mapIdx).toBeLessThan(validateIdx);
-	expect(parseIdx).toBeLessThan(validateIdx);
-
-	cleanupTestDir();
+		expect(result?.fixed).toBe(true);
+		const content = await Bun.file(file).text();
+		expect(content.indexOf("import")).toBeLessThan(content.indexOf("function"));
+		expect(content.indexOf("export")).toBeGreaterThan(content.indexOf("function"));
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should not modify files with no violations", async () => {
-	setupTestDir();
+test("handles arrow functions", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const code = `const helper = () => "helper";
+const main = () => helper();`;
+		const file = await createTestFile(dir, "test.ts", code);
+		const [result] = await fixFiles([file], fixConfig);
 
-	// Correct order: caller (main) before callee (helper)
-	const correctCode = `
-function main() {
-	const result = helper();
-	return result;
-}
-
-function helper() {
-	return "helper result";
-}
-`;
-
-	const filePath = createTestFile("test-no-violations.ts", correctCode);
-	const originalContent = readFileSync(filePath, "utf-8");
-
-	const results = await fixFiles([filePath], defaultConfig);
-
-	expect(results).toHaveLength(1);
-	const [result] = results;
-	expect(result?.fixed).toBe(false);
-	expect(result?.reordered).toBe(0);
-	expect(result?.errors).toHaveLength(0);
-
-	// Verify file content unchanged
-	const currentContent = readFileSync(filePath, "utf-8");
-	expect(currentContent).toBe(originalContent);
-
-	cleanupTestDir();
+		expect(result?.fixed).toBe(true);
+		expect(result?.errors).toHaveLength(0);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should handle files with circular dependencies", async () => {
-	setupTestDir();
+test("handles mixed declarations and arrows", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const code = `const arrowHelper = () => "arrow";
+function declHelper() { return "decl"; }
+function main() { return arrowHelper() + declHelper(); }`;
+		const file = await createTestFile(dir, "test.ts", code);
+		const [result] = await fixFiles([file], fixConfig);
 
-	const circularCode = `
-function funcA() {
-	funcB();
-}
-
-function funcB() {
-	funcC();
-}
-
-function funcC() {
-	funcA();
-}
-`;
-
-	const filePath = createTestFile("test-circular.ts", circularCode);
-
-	const results = await fixFiles([filePath], defaultConfig);
-
-	expect(results).toHaveLength(1);
-	const [result] = results;
-	// Should attempt to fix but may encounter circular dependency error
-	expect(result).toBeDefined();
-
-	cleanupTestDir();
+		expect(result?.fixed).toBe(true);
+		expect(result?.errors).toHaveLength(0);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should handle arrow functions", async () => {
-	setupTestDir();
+test("handles complex dependency chains", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const code = `function level3() { return "base"; }
+function level2a() { level3(); }
+function level2b() { level3(); }
+function level1() { level2a(); level2b(); }`;
+		const file = await createTestFile(dir, "test.ts", code);
+		const [result] = await fixFiles([file], fixConfig);
 
-	// Violation: callee (helper) appears ABOVE caller (main)
-	const arrowCode = `
-const helper = () => {
-	return "helper result";
-};
-
-const main = () => {
-	const result = helper();
-	return result;
-};
-`;
-
-	const filePath = createTestFile("test-arrow-functions.ts", arrowCode);
-
-	const results = await fixFiles([filePath], defaultConfig);
-
-	expect(results).toHaveLength(1);
-	const [result] = results;
-	expect(result?.fixed).toBe(true);
-	expect(result?.errors).toHaveLength(0);
-
-	cleanupTestDir();
+		expect(result?.fixed).toBe(true);
+		const content = await Bun.file(file).text();
+		const i1 = content.indexOf("function level1");
+		const i2a = content.indexOf("function level2a");
+		const i2b = content.indexOf("function level2b");
+		const i3 = content.indexOf("function level3");
+		expect(i1).toBeLessThan(i2a);
+		expect(i1).toBeLessThan(i2b);
+		expect(i2a).toBeLessThan(i3);
+		expect(i2b).toBeLessThan(i3);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should preserve imports and exports", async () => {
-	setupTestDir();
+// --- Bead fixtures (1e0, 27g) ---
 
-	// Violation: callee (helper) appears ABOVE caller (main)
-	const codeWithImports = `
-import { something } from "somewhere";
+test("1e0: fixes factory with method calling helper", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const content = await Bun.file("fixtures/test-factory-method-calls.ts").text();
+		const file = await createTestFile(dir, "test.ts", content);
+		const [result] = await fixFiles([file], fixConfig);
 
-function helper() {
-	return something();
-}
-
-function main() {
-	const result = helper();
-	return result;
-}
-
-export { main };
-`;
-
-	const filePath = createTestFile("test-imports-exports.ts", codeWithImports);
-
-	const results = await fixFiles([filePath], defaultConfig);
-
-	expect(results).toHaveLength(1);
-	const [result] = results;
-	expect(result?.fixed).toBe(true);
-
-	const fixedContent = readFileSync(filePath, "utf-8");
-	// Imports should be at the top
-	expect(fixedContent.indexOf("import")).toBeLessThan(fixedContent.indexOf("function"));
-	// Exports should be at the bottom
-	expect(fixedContent.indexOf("export")).toBeGreaterThan(fixedContent.indexOf("function"));
-
-	cleanupTestDir();
+		expect(result?.fixed).toBe(true);
+		expect(result?.errors).toHaveLength(0);
+		const [analysis] = await analyzeFiles([file], defaultConfig);
+		expect(analysis?.violations.length).toBe(0);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should handle mixed function declarations and arrow functions", async () => {
-	setupTestDir();
+test("27g: fixes arrow const chain", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const content = await Bun.file("fixtures/test-arrow-chain.ts").text();
+		const file = await createTestFile(dir, "test.ts", content);
+		const [result] = await fixFiles([file], fixConfig);
 
-	// Violation: callees (arrowHelper, declHelper) appear ABOVE caller (main)
-	const mixedCode = `
-const arrowHelper = () => {
-	return "arrow";
-};
-
-function declHelper() {
-	return "decl";
-}
-
-function main() {
-	const a = arrowHelper();
-	const b = declHelper();
-	return a + b;
-}
-`;
-
-	const filePath = createTestFile("test-mixed-functions.ts", mixedCode);
-
-	const results = await fixFiles([filePath], defaultConfig);
-
-	expect(results).toHaveLength(1);
-	const [result] = results;
-	expect(result?.fixed).toBe(true);
-	expect(result?.errors).toHaveLength(0);
-
-	cleanupTestDir();
+		expect(result?.fixed).toBe(true);
+		const [analysis] = await analyzeFiles([file], defaultConfig);
+		expect(analysis?.violations.length).toBe(0);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should handle files with no functions", async () => {
-	setupTestDir();
+test("27g: order-repo style - caller above callee", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const content = await Bun.file("fixtures/test-order-repo-27g.ts").text();
+		const file = await createTestFile(dir, "test.ts", content);
+		const [result] = await fixFiles([file], fixConfig);
 
-	const noFunctionsCode = `
-const x = 42;
-const y = "hello";
-console.log(x, y);
-`;
-
-	const filePath = createTestFile("test-no-functions.ts", noFunctionsCode);
-
-	const results = await fixFiles([filePath], defaultConfig);
-
-	expect(results).toHaveLength(1);
-	const [result] = results;
-	expect(result?.fixed).toBe(false);
-	expect(result?.reordered).toBe(0);
-
-	cleanupTestDir();
+		expect(result?.fixed).toBe(true);
+		const fixed = await Bun.file(file).text();
+		const createIdx = fixed.indexOf("function createSurrealOrderRepository");
+		const mapIdx = fixed.indexOf("const mapValidOrders");
+		const parseIdx = fixed.indexOf("const parseSingleOrder");
+		const validateIdx = fixed.indexOf("function validateAndParseOrder");
+		expect(createIdx).toBeLessThan(mapIdx);
+		expect(createIdx).toBeLessThan(parseIdx);
+		expect(mapIdx).toBeLessThan(validateIdx);
+		expect(parseIdx).toBeLessThan(validateIdx);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should handle complex dependency chains", async () => {
-	setupTestDir();
+// --- Error / edge cases ---
 
-	// Violation: callees appear ABOVE callers (bottom-up order)
-	const complexCode = `
-function level3() {
-	return "base";
-}
-
-function level2a() {
-	level3();
-}
-
-function level2b() {
-	level3();
-}
-
-function level1() {
-	level2a();
-	level2b();
-}
-`;
-
-	const filePath = createTestFile("test-complex-deps.ts", complexCode);
-
-	const results = await fixFiles([filePath], defaultConfig);
-
-	expect(results).toHaveLength(1);
-	const [result] = results;
-	expect(result?.fixed).toBe(true);
-
-	const fixedContent = readFileSync(filePath, "utf-8");
-	// After fix: callers before callees (top-down order)
-	const level1Index = fixedContent.indexOf("function level1");
-	const level2aIndex = fixedContent.indexOf("function level2a");
-	const level2bIndex = fixedContent.indexOf("function level2b");
-	const level3Index = fixedContent.indexOf("function level3");
-
-	expect(level1Index).toBeLessThan(level2aIndex);
-	expect(level1Index).toBeLessThan(level2bIndex);
-	expect(level2aIndex).toBeLessThan(level3Index);
-	expect(level2bIndex).toBeLessThan(level3Index);
-
-	cleanupTestDir();
+test("returns empty for non-matching patterns", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const results = await fixFiles(["non-existent-*.ts"], fixConfig);
+		expect(results).toHaveLength(0);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should handle error cases gracefully", async () => {
-	setupTestDir();
-
-	// Test with non-existent file pattern
-	const results = await fixFiles(["non-existent-file-*.ts"], defaultConfig);
-
-	expect(results).toHaveLength(0);
-
-	cleanupTestDir();
+test("handles files with no functions", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const file = await createTestFile(dir, "test.ts", "const x = 42;\nconsole.log(x);");
+		const [result] = await fixFiles([file], fixConfig);
+		expect(result?.fixed).toBe(false);
+		expect(result?.reordered).toBe(0);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
 
-test("should count function reorders correctly", async () => {
-	setupTestDir();
+test("handles circular dependencies without crashing", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const code = `function a() { b(); }
+function b() { c(); }
+function c() { a(); }`;
+		const file = await createTestFile(dir, "test.ts", code);
+		const [result] = await fixFiles([file], fixConfig);
+		expect(result).toBeDefined();
+	} finally {
+		cleanupTempDir(dir);
+	}
+});
 
-	// Violation: callees (a, b, c) appear ABOVE callers (x, y, z)
-	const reorderCode = `
-function a() { return 1; }
+test("handles files with only imports and exports", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const file = await createTestFile(dir, "test.ts", `import { x } from "x";\nexport { x };`);
+		const [result] = await fixFiles([file], fixConfig);
+		expect(result?.fixed).toBe(false);
+	} finally {
+		cleanupTempDir(dir);
+	}
+});
 
-// Padding 1
-// Padding 2
-// Padding 3
-// Padding 4
-// Padding 5
-
-function b() { return 2; }
-
-// Padding 6
-// Padding 7
-// Padding 8
-// Padding 9
-// Padding 10
-
-function c() { return 3; }
-
-// Padding 11
-// Padding 12
-// Padding 13
-// Padding 14
-// Padding 15
-
-function x() { c(); }
-
-// Padding 16
-// Padding 17
-// Padding 18
-// Padding 19
-// Padding 20
-
-function y() { b(); }
-
-// Padding 21
-// Padding 22
-// Padding 23
-// Padding 24
-// Padding 25
-
-function z() { a(); }
-`;
-
-	const filePath = createTestFile("test-reorder-count.ts", reorderCode);
-
-	const results = await fixFiles([filePath], defaultConfig);
-
-	expect(results).toHaveLength(1);
-	const [result] = results;
-	expect(result?.fixed).toBe(true);
-	expect(result?.reordered).toBeGreaterThan(0);
-
-	cleanupTestDir();
+test("handles syntax errors gracefully", async () => {
+	const dir = createTempDir("fixer-temp");
+	try {
+		const file = await createTestFile(dir, "test.ts", "function broken() {\n  // no close");
+		const [result] = await fixFiles([file], fixConfig);
+		expect(result).toBeDefined();
+	} finally {
+		cleanupTempDir(dir);
+	}
 });

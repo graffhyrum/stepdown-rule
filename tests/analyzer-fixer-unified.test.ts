@@ -1,23 +1,14 @@
 import { expect, test } from "bun:test";
-import { analyzeParsedFile } from "../src/analyzer";
-import { fixParsedFile } from "../src/fixer";
-import { FileService } from "../src/services/FileService";
-import type { Config } from "../src/types";
+import ts from "typescript";
+import { analyzeFiles, analyzeParsedFile } from "../src/analyzer";
+import { fixFiles, fixParsedFile } from "../src/fixer";
+import { cleanupTempDir, createTempDir, createTestFile, fixConfig } from "./helpers";
 
 /**
- * hje: Fixer must use analyzer's dependency graph, not rebuild from scratch.
- * Ensures analyzer and fixer share the same view of function dependencies.
+ * hje: Fixer must use analyzer's dependency graph.
+ * fixParsedFile with analysisResult uses same view as analyzer.
  */
-const defaultConfig: Config = {
-	ignore: [],
-	analyzeArrowFunctions: true,
-	analyzeExportsOnly: false,
-	reportCircularDependencies: true,
-	fix: true,
-	json: false,
-};
-
-test("hje: fixParsedFile with analysis result uses analyzer's dependency graph", () => {
+test("hje: fixParsedFile uses analyzer dependency graph when provided", () => {
 	const content = `
 function helper() {
 	return "helper result";
@@ -27,20 +18,17 @@ function main() {
 	return helper();
 }
 `;
-
-	const filePath = "test-hje.ts";
-	const service = new FileService({ ignore: [] });
-	const parsedFile = service.parseContent(content, filePath);
+	const sourceFile = ts.createSourceFile("test.ts", content, ts.ScriptTarget.Latest, true);
+	const parsedFile = { sourceFile, filePath: "test.ts", content };
 	const analysis = analyzeParsedFile(parsedFile);
 
 	expect(analysis.violations.length).toBeGreaterThan(0);
-	expect(analysis.dependencyGraph).toBeDefined();
 	expect(analysis.dependencyGraph?.get("main")).toContain("helper");
 
 	const result = fixParsedFile({
 		content,
-		filePath,
-		config: defaultConfig,
+		filePath: "test.ts",
+		config: fixConfig,
 		analysisResult: analysis,
 	});
 
@@ -50,36 +38,57 @@ function main() {
 	);
 });
 
-test("hje: fixFiles passes analysis to fix logic - analyze→fix→analyze converges", async () => {
+test("hje: analyze→fix→analyze converges", async () => {
 	const content = `
 const callee = () => "leaf";
 const caller = () => callee();
 `;
+	const dir = createTempDir("hje-temp");
+	try {
+		const file = await createTestFile(dir, "converge.ts", content);
 
-	const { fixFiles } = await import("../src/fixer");
-	const { analyzeFiles } = await import("../src/analyzer");
-	const { mkdirSync, rmSync, writeFileSync } = await import("node:fs");
-	const { join } = await import("node:path");
+		const [before] = await analyzeFiles([file], fixConfig);
+		const violationsBefore =
+			(before?.violations.length ?? 0) + (before?.nestedFunctionViolations.length ?? 0);
 
-	const TEST_DIR = join(process.cwd(), "tests", "fixtures-temp-hje");
-	rmSync(TEST_DIR, { recursive: true, force: true });
-	mkdirSync(TEST_DIR, { recursive: true });
+		await fixFiles([file], fixConfig);
 
-	const filePath = join(TEST_DIR, "converge.ts");
-	writeFileSync(filePath, content, "utf-8");
+		const [after] = await analyzeFiles([file], fixConfig);
+		const violationsAfter =
+			(after?.violations.length ?? 0) + (after?.nestedFunctionViolations.length ?? 0);
 
-	const [before] = await analyzeFiles([filePath], defaultConfig);
-	const violationsBefore =
-		(before?.violations.length ?? 0) + (before?.nestedFunctionViolations.length ?? 0);
+		expect(violationsAfter).toBeLessThanOrEqual(violationsBefore);
+		expect(violationsAfter).toBe(0);
+	} finally {
+		cleanupTempDir(dir);
+	}
+});
 
-	await fixFiles([filePath], defaultConfig);
+/**
+ * Rule: anything the analyzer detects must be fixable by the fixer.
+ * Callee-defined-first with multiple callers (e.g. createUnfixedResult pattern).
+ */
+test("stepdown: callee-first with multiple callers → fix → 0 violations", async () => {
+	const content = `function sharedHelper() { return "ok"; }
+function callerA() { return sharedHelper(); }
+function callerB() { return sharedHelper(); }
+function callerC() { return sharedHelper(); }
+`;
+	const dir = createTempDir("stepdown-fix-temp");
+	try {
+		const file = await createTestFile(dir, "stepdown.ts", content);
+		const [before] = await analyzeFiles([file], fixConfig);
+		const stepdownBefore = before?.violations.length ?? 0;
+		expect(stepdownBefore).toBeGreaterThan(0);
 
-	const [after] = await analyzeFiles([filePath], defaultConfig);
-	const violationsAfter =
-		(after?.violations.length ?? 0) + (after?.nestedFunctionViolations.length ?? 0);
+		const [fixResult] = await fixFiles([file], fixConfig);
+		expect(fixResult?.fixed).toBe(true);
+		expect(fixResult?.errors).toHaveLength(0);
 
-	expect(violationsAfter).toBeLessThanOrEqual(violationsBefore);
-	expect(violationsAfter).toBe(0);
-
-	rmSync(TEST_DIR, { recursive: true, force: true });
+		const [after] = await analyzeFiles([file], fixConfig);
+		const stepdownAfter = after?.violations.length ?? 0;
+		expect(stepdownAfter).toBe(0);
+	} finally {
+		cleanupTempDir(dir);
+	}
 });
