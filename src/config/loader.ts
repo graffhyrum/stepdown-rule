@@ -16,7 +16,7 @@ export async function loadConfig(configPath?: string): Promise<typeof FileConfig
 	try {
 		const fileExists = await Bun.file(configPath).exists();
 		if (!fileExists) {
-			throw new Error(`Config file not found: ${configPath}`);
+			return defaultConfig;
 		}
 
 		const fileContent = await Bun.file(configPath).text();
