@@ -279,9 +279,8 @@ function nonExportedDecl() {
 	expect(results).toHaveLength(1);
 	const [result] = results;
 	expect(result).toBeDefined();
-	// exportedFunc is exported so it's not counted (analyzeExportsOnly: false means we analyze all)
-	// But exported variable statements are filtered out in extractFunctions
-	expect(result?.totalFunctions).toBe(3); // nonExportedFunc, exportedDecl, nonExportedDecl
+	// All functions counted including exported variable statements (obe: consistent handling)
+	expect(result?.totalFunctions).toBe(4); // exportedFunc, nonExportedFunc, exportedDecl, nonExportedDecl
 
 	cleanupTestDir();
 });

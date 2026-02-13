@@ -63,7 +63,7 @@ function extractFunctions(sourceFile: ts.SourceFile): FunctionInfo[] {
 			ts.forEachChild(node, (child) => visit(child, funcName));
 			return;
 		}
-		if (ts.isVariableStatement(node) && !hasExportModifier(node)) {
+		if (ts.isVariableStatement(node)) {
 			// Check if this variable statement contains a function
 			const context: VariableStatementContext = { sourceFile, functions, parentFunction };
 			const funcName = handleVariableStatement(node, context);
@@ -675,7 +675,7 @@ function createVariableFunctionInfo(
 			start: node.getStart(),
 			end: node.getEnd(),
 		},
-		isExported: false,
+		isExported: hasExportModifier(node),
 		dependencies: [],
 		canBeFunctionDeclaration: isArrowFunctionOrFunctionExpression(declaration.initializer)
 			? canConvertToFunctionDeclaration(

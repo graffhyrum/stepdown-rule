@@ -123,9 +123,167 @@ function reorderFunctionDeclarations(sourceFile: ts.SourceFile): string {
 	const reorderedFunctions = reorderFunctions(categorized.functions, dependencies, sourceFile);
 
 	const newStatements = reconstructStatements(categorized, reorderedFunctions);
-	const newSourceFile = ts.factory.updateSourceFile(sourceFile, newStatements);
+	let newSourceFile = ts.factory.updateSourceFile(sourceFile, newStatements);
+
+	newSourceFile = transformNestedBlocks(newSourceFile);
 
 	return printer.printFile(newSourceFile);
+}
+
+function transformNestedBlocks(sourceFile: ts.SourceFile): ts.SourceFile {
+	return visitForNestedBlocks(sourceFile, sourceFile) as ts.SourceFile;
+}
+
+function visitForNestedBlocks(node: ts.Node, sourceFile: ts.SourceFile): ts.Node {
+	const arrowOrExpr = tryReorderArrowOrFunctionExpr(node, sourceFile);
+	if (arrowOrExpr) return arrowOrExpr;
+
+	const fnDecl = tryReorderFunctionDeclaration(node, sourceFile);
+	if (fnDecl) return fnDecl;
+
+	if (ts.isSourceFile(node)) {
+		return ts.factory.updateSourceFile(
+			node,
+			node.statements.map((s) => visitForNestedBlocks(s, sourceFile) as ts.Statement),
+		);
+	}
+	if (ts.isVariableStatement(node)) return visitVariableStatementNested(node, sourceFile);
+	if (ts.isCallExpression(node)) return visitCallExpressionNested(node, sourceFile);
+	return node;
+}
+
+function tryReorderArrowOrFunctionExpr(node: ts.Node, sourceFile: ts.SourceFile): ts.Node | null {
+	if (!(ts.isArrowFunction(node) || ts.isFunctionExpression(node))) return null;
+	const body = node.body;
+	if (!ts.isBlock(body) || body.statements.length < 2) return null;
+	const reordered = reorderBlockStatements(body, sourceFile);
+	if (!reordered) return null;
+	if (ts.isArrowFunction(node)) {
+		return ts.factory.updateArrowFunction(
+			node,
+			node.modifiers,
+			node.typeParameters,
+			node.parameters,
+			node.type,
+			node.equalsGreaterThanToken,
+			reordered,
+		);
+	}
+	return ts.factory.updateFunctionExpression(
+		node,
+		node.modifiers,
+		node.asteriskToken,
+		node.name,
+		node.typeParameters,
+		node.parameters,
+		node.type,
+		reordered,
+	);
+}
+
+function tryReorderFunctionDeclaration(node: ts.Node, sourceFile: ts.SourceFile): ts.Node | null {
+	if (!(ts.isFunctionDeclaration(node) && node.body && ts.isBlock(node.body))) return null;
+	const body = node.body;
+	if (body.statements.length < 2) return null;
+	const reordered = reorderBlockStatements(body, sourceFile);
+	if (!reordered) return null;
+	return ts.factory.updateFunctionDeclaration(
+		node,
+		node.modifiers,
+		node.asteriskToken,
+		node.name,
+		node.typeParameters,
+		node.parameters,
+		node.type,
+		reordered,
+	);
+}
+
+function visitVariableStatementNested(
+	node: ts.VariableStatement,
+	sourceFile: ts.SourceFile,
+): ts.Node {
+	const newDecls = node.declarationList.declarations.map((d) => {
+		if (!d.initializer) return d;
+		const newInit = visitForNestedBlocks(d.initializer, sourceFile) as ts.Expression;
+		return newInit !== d.initializer
+			? ts.factory.updateVariableDeclaration(d, d.name, d.exclamationToken, d.type, newInit)
+			: d;
+	});
+	const changed = newDecls.some((d, i) => d !== node.declarationList.declarations[i]);
+	return changed
+		? ts.factory.updateVariableStatement(
+				node,
+				node.modifiers,
+				ts.factory.updateVariableDeclarationList(node.declarationList, newDecls),
+			)
+		: node;
+}
+
+function visitCallExpressionNested(node: ts.CallExpression, sourceFile: ts.SourceFile): ts.Node {
+	const newArgs = node.arguments.map((arg) => {
+		if (!(ts.isFunctionExpression(arg) || ts.isArrowFunction(arg))) return arg;
+		return visitForNestedBlocks(arg, sourceFile) as ts.Expression;
+	});
+	const changed = newArgs.some((a, i) => a !== node.arguments[i]);
+	return changed
+		? ts.factory.updateCallExpression(node, node.expression, node.typeArguments, newArgs)
+		: node;
+}
+
+function reorderBlockStatements(block: ts.Block, sourceFile: ts.SourceFile): ts.Block | null {
+	const funcStatements: Array<{ stmt: ts.Statement; name: string }> = [];
+	for (const stmt of block.statements) {
+		const name = extractStatementFunctionName(stmt, sourceFile);
+		if (name) funcStatements.push({ stmt, name });
+	}
+	if (funcStatements.length < 2) return null;
+
+	const functionNames = new Map<string, ts.Node>();
+	for (const { stmt, name } of funcStatements) {
+		functionNames.set(name, stmt);
+	}
+	const dependencies = new Map<string, string[]>();
+	for (const { stmt, name } of funcStatements) {
+		const deps = extractDependenciesFor(stmt, sourceFile, functionNames);
+		dependencies.set(name, deps);
+	}
+
+	const sorted = topologicalSort(dependencies).reverse();
+	const reorderedStmts = sorted
+		.map((n) => funcStatements.find((f) => f.name === n)?.stmt)
+		.filter((s): s is ts.Statement => s !== undefined);
+
+	const otherStatements = block.statements.filter((s) => !funcStatements.some((f) => f.stmt === s));
+	const newStatements = [...reorderedStmts, ...otherStatements];
+	if (
+		JSON.stringify(newStatements.map((s) => s.getText(sourceFile))) !==
+		JSON.stringify(block.statements.map((s) => s.getText(sourceFile)))
+	) {
+		return ts.factory.createBlock(newStatements, true);
+	}
+	return null;
+}
+
+function extractStatementFunctionName(
+	stmt: ts.Statement,
+	sourceFile: ts.SourceFile,
+): string | null {
+	if (ts.isFunctionDeclaration(stmt) && stmt.name) {
+		return stmt.name.getText(sourceFile);
+	}
+	if (ts.isVariableStatement(stmt)) {
+		const [decl] = stmt.declarationList.declarations;
+		if (
+			decl?.name &&
+			ts.isIdentifier(decl.name) &&
+			decl.initializer &&
+			isFunctionExpression(decl.initializer)
+		) {
+			return decl.name.getText(sourceFile);
+		}
+	}
+	return null;
 }
 
 function reconstructStatements(
