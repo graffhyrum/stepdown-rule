@@ -4,6 +4,7 @@ import picocolors from "picocolors";
 import { analyzeFiles } from "./analyzer";
 import { loadConfig } from "./config/loader";
 import { fixFiles } from "./fixer";
+import { FileService } from "./services/FileService";
 import type { AnalysisResult, Config, FixResult } from "./types";
 
 const program = new Command();
@@ -57,7 +58,8 @@ function getErrorMessage(error: unknown): string {
 }
 
 async function handleAnalyze(patterns: string[], config: Config, verbose: boolean): Promise<void> {
-	const results = await analyzeFiles(getPatterns(patterns), config);
+	const fileService = new FileService({ ignore: config.ignore });
+	const results = await analyzeFiles(getPatterns(patterns), config, fileService);
 	outputAnalysisResults(results, config.json, verbose);
 }
 
@@ -119,7 +121,8 @@ function formatAnalysisResult(result: AnalysisResult, verbose: boolean = false):
 }
 
 async function handleFix(patterns: string[], config: Config): Promise<void> {
-	const fixResults = await fixFiles(getPatterns(patterns), config);
+	const fileService = new FileService({ ignore: config.ignore });
+	const fixResults = await fixFiles(getPatterns(patterns), config, fileService);
 	outputFixResults(fixResults, config.json);
 }
 

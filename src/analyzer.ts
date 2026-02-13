@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
-import { glob } from "glob";
 import ts from "typescript";
+import { FileService } from "./services/FileService";
+import type { ParsedFile } from "./services/types";
 import type {
 	AnalysisResult,
 	CallSite,
@@ -10,21 +10,26 @@ import type {
 	StepdownViolation,
 } from "./types";
 
-export async function analyzeFiles(patterns: string[], config: Config): Promise<AnalysisResult[]> {
-	const files = await resolveFiles(patterns, config.ignore);
+export async function analyzeFiles(
+	patterns: string[],
+	config: Config,
+	fileService?: FileService,
+): Promise<AnalysisResult[]> {
+	const service = fileService ?? new FileService({ ignore: config.ignore });
+	const files = await service.resolveFiles(patterns);
 	const results: AnalysisResult[] = [];
 
-	for (const file of files) {
-		const result = analyzeFile(file);
+	for (const filePath of files) {
+		const parsedFile = service.parseFile(filePath);
+		const result = analyzeParsedFile(parsedFile);
 		results.push(result);
 	}
 
 	return results;
 }
 
-function analyzeFile(filePath: string): AnalysisResult {
-	const sourceCode = readFileSync(filePath, "utf-8");
-	const sourceFile = ts.createSourceFile(filePath, sourceCode, ts.ScriptTarget.Latest, true);
+export function analyzeParsedFile(parsedFile: ParsedFile): AnalysisResult {
+	const { sourceFile, filePath } = parsedFile;
 
 	const functions = extractFunctions(sourceFile);
 	const callGraph = buildCallGraph(functions, sourceFile);
@@ -580,19 +585,6 @@ function extractCycle(funcName: string, context: CircularDepsContext): string[] 
 function isValidCycle(cycle: string[]): boolean {
 	// Skip self-recursive cycles (e.g., "A → A → A")
 	return cycle.length > 2 || (cycle.length === 2 && cycle[0] !== cycle[1]);
-}
-
-async function resolveFiles(patterns: string[], ignorePatterns: string[]): Promise<string[]> {
-	const allFiles: string[] = [];
-
-	for (const pattern of patterns) {
-		const matches = await glob(pattern, {
-			ignore: ["node_modules/**", "dist/**", "coverage/**", "*.d.ts", ...ignorePatterns],
-		});
-		allFiles.push(...matches);
-	}
-
-	return [...new Set(allFiles)].sort((a, b) => a.localeCompare(b));
 }
 
 function handleFunctionDeclaration({
