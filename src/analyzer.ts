@@ -152,7 +152,7 @@ function findViolationsForFunction(
 		}
 
 		const depFunc = functions.find((f) => f.name === calledFunction);
-		if (!depFunc || depFunc.parentFunction !== null) {
+		if (depFunc?.parentFunction !== null) {
 			continue;
 		}
 
@@ -420,7 +420,7 @@ function isReferencedInFunctionBody(
 ): boolean {
 	// Find the function declaration for the parent
 	const functionNode = findFunctionNode(parentInfo, sourceFile);
-	if (!(functionNode && functionNode.body && ts.isBlock(functionNode.body))) {
+	if (!(functionNode?.body && ts.isBlock(functionNode.body))) {
 		return false;
 	}
 
@@ -666,7 +666,7 @@ function createVariableFunctionInfo(
 		return null;
 	}
 
-	const functionInfo: FunctionInfo = {
+	return {
 		name,
 		kind: ts.isArrowFunction(declaration.initializer) ? "arrow-function" : "function-expression",
 		position: {
@@ -685,7 +685,6 @@ function createVariableFunctionInfo(
 			: false,
 		parentFunction: context.parentFunction,
 	};
-	return functionInfo;
 }
 
 function canConvertToFunctionDeclaration(
