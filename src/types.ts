@@ -40,6 +40,8 @@ export interface AnalysisResult {
 	nestedFunctionViolations: NestedFunctionViolation[];
 	circularDependencies: string[][];
 	totalFunctions: number;
+	/** Top-level function -> callees (for fixer to use same view as analyzer) */
+	dependencyGraph?: Map<string, string[]>;
 }
 
 export interface FixResult {

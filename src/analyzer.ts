@@ -40,13 +40,24 @@ export function analyzeParsedFile(parsedFile: ParsedFile): AnalysisResult {
 	// Filter out violations that are part of circular dependency cycles (not actionable)
 	const actionableViolations = filterOutCircularViolations(violations, circularDependencies);
 
+	const dependencyGraph = callGraphToDependencyMap(callGraph);
+
 	return {
 		file: filePath,
 		violations: actionableViolations,
 		nestedFunctionViolations,
 		circularDependencies,
 		totalFunctions: functions.length,
+		dependencyGraph,
 	};
+}
+
+function callGraphToDependencyMap(callGraph: Map<string, CallSiteInfo[]>): Map<string, string[]> {
+	const map = new Map<string, string[]>();
+	for (const [caller, deps] of callGraph) {
+		map.set(caller, [...new Set(deps.map((d) => d.calledFunction))]);
+	}
+	return map;
 }
 
 function extractFunctions(sourceFile: ts.SourceFile): FunctionInfo[] {

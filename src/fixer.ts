@@ -1,7 +1,7 @@
 import ts from "typescript";
 import { analyzeFiles } from "./analyzer";
 import { FileService } from "./services/FileService";
-import type { Config, FixResult } from "./types";
+import type { AnalysisResult, Config, FixResult } from "./types";
 
 export async function fixFiles(
 	patterns: string[],
@@ -9,7 +9,7 @@ export async function fixFiles(
 	fileService?: FileService,
 ): Promise<FixResult[]> {
 	const service = fileService ?? new FileService({ ignore: config.ignore });
-	const analysisResults = await analyzeFiles(patterns, config);
+	const analysisResults = await analyzeFiles(patterns, config, service);
 	const fixResults: FixResult[] = [];
 
 	for (const result of analysisResults) {
@@ -33,7 +33,12 @@ function processAnalysisResult(
 		return createCircularDependencyResult(result.file, result.circularDependencies.length);
 	}
 
-	return fixFileWithErrorHandling(result.file, config, service);
+	return fixFileWithErrorHandling({
+		filePath: result.file,
+		config,
+		service,
+		analysisResult: result,
+	});
 }
 
 function createNoViolationsResult(file: string): FixResult {
@@ -58,16 +63,17 @@ function createCircularDependencyResult(file: string, count: number): FixResult 
 	};
 }
 
-function fixFileWithErrorHandling(
-	filePath: string,
-	config: Config,
-	service: FileService,
-): FixResult {
+function fixFileWithErrorHandling(params: {
+	filePath: string;
+	config: Config;
+	service: FileService;
+	analysisResult: AnalysisResult;
+}): FixResult {
 	try {
-		return fixFile(filePath, config, service);
+		return fixFile(params);
 	} catch (error) {
 		return {
-			file: filePath,
+			file: params.filePath,
 			fixed: false,
 			originalContent: "",
 			fixedContent: "",
@@ -77,9 +83,15 @@ function fixFileWithErrorHandling(
 	}
 }
 
-function fixFile(filePath: string, _config: Config, service: FileService): FixResult {
+function fixFile(params: {
+	filePath: string;
+	config: Config;
+	service: FileService;
+	analysisResult: AnalysisResult;
+}): FixResult {
+	const { filePath, config, service, analysisResult } = params;
 	const originalContent = service.readFile(filePath);
-	const fixResult = fixParsedFile(originalContent, filePath, _config);
+	const fixResult = fixParsedFile({ content: originalContent, filePath, config, analysisResult });
 
 	if (fixResult.fixed) {
 		service.writeFile(filePath, fixResult.fixedContent);
@@ -88,10 +100,16 @@ function fixFile(filePath: string, _config: Config, service: FileService): FixRe
 	return fixResult;
 }
 
-export function fixParsedFile(content: string, filePath: string, _config: Config): FixResult {
+export function fixParsedFile(params: {
+	content: string;
+	filePath: string;
+	config?: Config;
+	analysisResult?: AnalysisResult;
+}): FixResult {
+	const { content, filePath, analysisResult } = params;
 	const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
 
-	const fixedContent = reorderFunctionDeclarations(sourceFile);
+	const fixedContent = reorderFunctionDeclarations(sourceFile, analysisResult?.dependencyGraph);
 	const hasChanges = fixedContent !== content;
 
 	if (hasChanges) {
@@ -115,11 +133,15 @@ export function fixParsedFile(content: string, filePath: string, _config: Config
 	};
 }
 
-function reorderFunctionDeclarations(sourceFile: ts.SourceFile): string {
+function reorderFunctionDeclarations(
+	sourceFile: ts.SourceFile,
+	analyzerDependencyGraph?: Map<string, string[]>,
+): string {
 	const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
 	const categorized = categorizeNodes(sourceFile);
 
-	const { dependencies } = buildDependencyGraph(categorized.functions, sourceFile);
+	const dependencies =
+		analyzerDependencyGraph ?? buildDependencyGraph(categorized.functions, sourceFile).dependencies;
 	const reorderedFunctions = reorderFunctions(categorized.functions, dependencies, sourceFile);
 
 	const newStatements = reconstructStatements(categorized, reorderedFunctions);
