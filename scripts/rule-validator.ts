@@ -1,8 +1,15 @@
 // Rule Compliance Validator
 // Scans code for violations of AGENTS.md rules
 
-import { promises } from "node:fs";
 import path from "node:path";
+import { Glob } from "bun";
+
+const EXCLUDE_PATTERNS = ["node_modules/", "dist/", "build/", ".git/", "playwright-report/"];
+
+function shouldExclude(filePath: string): boolean {
+	const normalized = filePath.replace(/\\/g, "/");
+	return EXCLUDE_PATTERNS.some((p) => normalized.includes(p));
+}
 
 interface Rule {
 	name: string;
@@ -138,22 +145,14 @@ function exitWithResult(errorCount: number, warningCount: number): never {
 async function scanFiles(
 	pattern: string,
 ): Promise<{ totalViolations: number; errorCount: number; warningCount: number }> {
-	const files = promises.glob(pattern, {
-		exclude: [
-			"node_modules/**",
-			"**/node_modules/**",
-			"dist/**",
-			"build/**",
-			".git/**",
-			"playwright-report/**",
-		],
-	});
+	const glob = new Glob(pattern);
 
 	let totalViolations = 0;
 	let errorCount = 0;
 	let warningCount = 0;
 
-	for await (const file of files) {
+	for await (const file of glob.scan(".")) {
+		if (shouldExclude(file)) continue;
 		if (!shouldProcessFile(file)) {
 			continue;
 		}
