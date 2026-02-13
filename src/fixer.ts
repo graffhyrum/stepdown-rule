@@ -249,7 +249,11 @@ function reorderBlockStatements(block: ts.Block, sourceFile: ts.SourceFile): ts.
 		dependencies.set(name, deps);
 	}
 
-	const sorted = topologicalSort(dependencies).reverse();
+	const blockSourceOrder = new Map<string, number>();
+	for (const [i, { name }] of funcStatements.entries()) {
+		blockSourceOrder.set(name, i);
+	}
+	const sorted = topologicalSort(dependencies, blockSourceOrder).reverse();
 	const reorderedStmts = sorted
 		.map((n) => funcStatements.find((f) => f.name === n)?.stmt)
 		.filter((s): s is ts.Statement => s !== undefined);
@@ -410,22 +414,33 @@ function reorderFunctions(
 	dependencies: Map<string, string[]>,
 	sourceFile: ts.SourceFile,
 ): Array<{ node: ts.Node; info: null }> {
-	const sorted = topologicalSort(dependencies).reverse();
+	const sourceOrder = new Map<string, number>();
+	for (const [i, f] of functions.entries()) {
+		const name = extractFunctionName(f.node, sourceFile);
+		if (name) sourceOrder.set(name, i);
+	}
+	const sorted = topologicalSort(dependencies, sourceOrder).reverse();
 	return sorted
 		.map((name) => functions.find((f) => extractFunctionName(f.node, sourceFile) === name))
 		.filter((f): f is { node: ts.Node; info: null } => f !== undefined);
 }
 
-function topologicalSort(dependencies: Map<string, string[]>): string[] {
+function topologicalSort(
+	dependencies: Map<string, string[]>,
+	sourceOrder: Map<string, number>,
+): string[] {
 	const visited = new Set<string>();
 	const temp = new Set<string>();
 	const result: string[] = [];
 
-	dependencies.forEach((_, name) => {
+	const names = [...dependencies.keys()].sort(
+		(a, b) => (sourceOrder.get(a) ?? 999) - (sourceOrder.get(b) ?? 999),
+	);
+	for (const name of names) {
 		if (!visited.has(name)) {
-			visitDependencyNode(name, { dependencies, visited, temp, result });
+			visitDependencyNode(name, { dependencies, visited, temp, result, sourceOrder });
 		}
-	});
+	}
 
 	return result;
 }
@@ -435,6 +450,7 @@ interface SortContext {
 	visited: Set<string>;
 	temp: Set<string>;
 	result: string[];
+	sourceOrder: Map<string, number>;
 }
 
 function visitDependencyNode(name: string, context: SortContext): void {
@@ -447,7 +463,10 @@ function visitDependencyNode(name: string, context: SortContext): void {
 
 	context.temp.add(name);
 	const deps = context.dependencies.get(name) || [];
-	for (const dep of deps) {
+	const orderedDeps = [...deps].sort(
+		(a, b) => (context.sourceOrder.get(a) ?? 999) - (context.sourceOrder.get(b) ?? 999),
+	);
+	for (const dep of orderedDeps) {
 		visitDependencyNode(dep, context);
 	}
 	context.temp.delete(name);
