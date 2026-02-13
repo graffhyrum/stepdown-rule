@@ -1,3 +1,4 @@
+- Each analysis (violation type) must have a fix implementation. Add fixture in `src/violation-coverage.ts` and ensure fix reduces violations.
 - Use bun instead of node.
     - `npm run` > `bun run`
     - `npx` > `bunx`
