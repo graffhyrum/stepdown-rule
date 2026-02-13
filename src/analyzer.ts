@@ -394,7 +394,11 @@ function checkAndAddViolation(params: ViolationCheckParams): void {
 
 	// Rule 1: Logic should come before function declarations within any scope
 	// If the nested function declaration appears before the last logic statement, it's a violation
-	if (nestedLine < lastLogicLine) {
+	// Exception: Don't report violation if the nested function is referenced in the function body
+	if (
+		nestedLine < lastLogicLine &&
+		!isReferencedInFunctionBody(nestedName, parentInfo, sourceFile)
+	) {
 		violations.push({
 			file: "",
 			parent: parentInfo,
@@ -402,6 +406,71 @@ function checkAndAddViolation(params: ViolationCheckParams): void {
 			message: `Nested function violation: ${nestedName} should appear after all logic in ${parentInfo.name}`,
 		});
 	}
+}
+
+function isReferencedInFunctionBody(
+	nestedName: string,
+	parentInfo: FunctionInfo,
+	sourceFile: ts.SourceFile,
+): boolean {
+	// Find the function declaration for the parent
+	const functionNode = findFunctionNode(parentInfo, sourceFile);
+	if (!(functionNode && functionNode.body && ts.isBlock(functionNode.body))) {
+		return false;
+	}
+
+	// Check if the nested function is referenced anywhere in the function body,
+	// excluding the nested function's own declaration
+	return containsIdentifierExcludingNestedDeclaration(functionNode.body, nestedName, sourceFile);
+}
+
+function findFunctionNode(
+	funcInfo: FunctionInfo,
+	sourceFile: ts.SourceFile,
+): ts.FunctionLikeDeclaration | null {
+	// This is a simplified implementation - in a real scenario you'd need more robust AST traversal
+	// For now, we'll search for function declarations by position
+	function visit(node: ts.Node): ts.FunctionLikeDeclaration | null {
+		if (
+			(ts.isFunctionDeclaration(node) ||
+				ts.isArrowFunction(node) ||
+				ts.isFunctionExpression(node)) &&
+			node.getStart() === funcInfo.position.start
+		) {
+			return node as ts.FunctionLikeDeclaration;
+		}
+		return ts.forEachChild(node, visit) || null;
+	}
+
+	return visit(sourceFile);
+}
+
+function containsIdentifierExcludingNestedDeclaration(
+	node: ts.Node,
+	name: string,
+	sourceFile: ts.SourceFile,
+): boolean {
+	// Skip function declarations and variable declarations that define the function we're looking for
+	if (ts.isFunctionDeclaration(node) && node.name && node.name.getText(sourceFile) === name) {
+		return false;
+	}
+	if (ts.isVariableStatement(node)) {
+		for (const decl of node.declarationList.declarations) {
+			if (decl.name && ts.isIdentifier(decl.name) && decl.name.getText(sourceFile) === name) {
+				return false;
+			}
+		}
+	}
+
+	if (ts.isIdentifier(node) && node.getText(sourceFile) === name) {
+		return true;
+	}
+	for (const child of node.getChildren()) {
+		if (containsIdentifierExcludingNestedDeclaration(child, name, sourceFile)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 interface CircularDepsContext {

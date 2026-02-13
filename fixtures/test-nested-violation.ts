@@ -5,5 +5,6 @@ function parent() {
 		return "I help";
 	}
 
-	return helper();
+	console.log("doing something");
+	return "done";
 }
