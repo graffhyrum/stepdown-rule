@@ -144,7 +144,7 @@ Circular dependencies do NOT prevent the fixer from running, but files with circ
 
 ## Configuration
 
-Create a `.stepdownrc.json` file:
+Create a `.stepdownrc.json` file (optional):
 
 ```json
 {
