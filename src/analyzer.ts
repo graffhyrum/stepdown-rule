@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { getPosition, getPositionFromOffset, isFunctionLike } from "./ast-utils";
 import { FileService } from "./services/FileService";
 import type { ParsedFile } from "./services/types";
 import type {
@@ -20,7 +21,7 @@ export async function analyzeFiles(
 	const results: AnalysisResult[] = [];
 
 	for (const filePath of files) {
-		const parsedFile = service.parseFile(filePath);
+		const parsedFile = await service.parseFile(filePath);
 		const result = analyzeParsedFile(parsedFile);
 		results.push(result);
 	}
@@ -115,11 +116,8 @@ function buildCallGraph(
 			if (functionNames.has(calledFunction)) {
 				const container = findContainingFunction(node, sourceFile);
 				if (container) {
-					const callSite: CallSite = {
-						line: sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1,
-						column: sourceFile.getLineAndCharacterOfPosition(node.getStart()).character + 1,
-					};
-					recordDependency(calledFunction, container, callSite);
+					const { line, column } = getPosition(sourceFile, node);
+					recordDependency(calledFunction, container, { line, column });
 				}
 			}
 		}
@@ -142,8 +140,8 @@ function findViolations(
 	const topLevelFunctions = functions.filter((f) => f.parentFunction === null);
 
 	for (const func of topLevelFunctions) {
-		const violations_for_function = findViolationsForFunction(func, functions, callGraph);
-		violations.push(...violations_for_function);
+		const violationsForFunction = findViolationsForFunction(func, functions, callGraph);
+		violations.push(...violationsForFunction);
 	}
 
 	return violations;
@@ -223,7 +221,7 @@ function processVariableStatement(
 	for (const decl of node.declarationList.declarations) {
 		const isValidArrowFunc =
 			decl.initializer &&
-			isArrowFunctionOrFunctionExpression(decl.initializer) &&
+			isFunctionLike(decl.initializer) &&
 			decl.name &&
 			ts.isIdentifier(decl.name);
 
@@ -305,7 +303,7 @@ function processVariableDeclaration(params: VariableDeclParams): void {
 	const { sourceFile, functionMap, violations } = context;
 
 	for (const decl of statement.declarationList.declarations) {
-		if (!(decl.initializer && isArrowFunctionOrFunctionExpression(decl.initializer))) {
+		if (!(decl.initializer && isFunctionLike(decl.initializer))) {
 			continue;
 		}
 		if (!(decl.name && ts.isIdentifier(decl.name))) {
@@ -378,7 +376,7 @@ function findLastLogicStatementLine(
 		// Skip variable statements that contain arrow functions or function expressions
 		if (ts.isVariableStatement(statement)) {
 			const hasOnlyFunctionDeclarations = statement.declarationList.declarations.every(
-				(decl) => decl.initializer && isArrowFunctionOrFunctionExpression(decl.initializer),
+				(decl) => decl.initializer && isFunctionLike(decl.initializer),
 			);
 			if (hasOnlyFunctionDeclarations) {
 				continue;
@@ -386,7 +384,7 @@ function findLastLogicStatementLine(
 		}
 
 		// This is a logic statement - update the last logic line
-		const line = sourceFile.getLineAndCharacterOfPosition(statement.getStart()).line + 1;
+		const line = getPosition(sourceFile, statement).line;
 		lastLogicLine = Math.max(lastLogicLine, line);
 	}
 
@@ -406,7 +404,7 @@ interface ViolationCheckParams {
 function checkAndAddViolation(params: ViolationCheckParams): void {
 	const { nodeStart, nestedName, nestedInfo, parentInfo, lastLogicLine, violations, sourceFile } =
 		params;
-	const nestedLine = sourceFile.getLineAndCharacterOfPosition(nodeStart).line + 1;
+	const nestedLine = getPositionFromOffset(sourceFile, nodeStart).line;
 
 	// Rule 1: Logic should come before function declarations within any scope
 	// If the nested function declaration appears before the last logic statement, it's a violation
@@ -444,8 +442,6 @@ function findFunctionNode(
 	funcInfo: FunctionInfo,
 	sourceFile: ts.SourceFile,
 ): ts.FunctionLikeDeclaration | null {
-	// This is a simplified implementation - in a real scenario you'd need more robust AST traversal
-	// For now, we'll search for function declarations by position
 	function visit(node: ts.Node): ts.FunctionLikeDeclaration | null {
 		if (
 			(ts.isFunctionDeclaration(node) ||
@@ -525,12 +521,7 @@ function filterOutCircularViolations(
 	violations: StepdownViolation[],
 	circularDependencies: string[][],
 ): StepdownViolation[] {
-	const functionsInCycles = new Set<string>();
-	for (const cycle of circularDependencies) {
-		for (const funcName of cycle) {
-			functionsInCycles.add(funcName);
-		}
-	}
+	const functionsInCycles = new Set(circularDependencies.flat());
 
 	// Keep only violations where neither function is part of a cycle
 	return violations.filter(
@@ -611,12 +602,12 @@ function handleFunctionDeclaration({
 	functions: FunctionInfo[];
 	parentFunction: string | null;
 }): void {
+	const pos = getPosition(sourceFile, node);
 	const functionInfo: FunctionInfo = {
 		name: name.getText(sourceFile),
 		kind: "declaration",
 		position: {
-			line: sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1,
-			column: sourceFile.getLineAndCharacterOfPosition(node.getStart()).character + 1,
+			...pos,
 			start: node.getStart(),
 			end: node.getEnd(),
 		},
@@ -654,7 +645,7 @@ function extractVariableFunction(
 	node: ts.VariableStatement,
 	context: VariableStatementContext,
 ): string | null {
-	if (!(declaration.initializer && isArrowFunctionOrFunctionExpression(declaration.initializer))) {
+	if (!(declaration.initializer && isFunctionLike(declaration.initializer))) {
 		return null;
 	}
 
@@ -677,18 +668,18 @@ function createVariableFunctionInfo(
 		return null;
 	}
 
+	const pos = getPosition(context.sourceFile, node);
 	return {
 		name,
 		kind: ts.isArrowFunction(declaration.initializer) ? "arrow-function" : "function-expression",
 		position: {
-			line: context.sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1,
-			column: context.sourceFile.getLineAndCharacterOfPosition(node.getStart()).character + 1,
+			...pos,
 			start: node.getStart(),
 			end: node.getEnd(),
 		},
 		isExported: hasExportModifier(node),
 		dependencies: [],
-		canBeFunctionDeclaration: isArrowFunctionOrFunctionExpression(declaration.initializer)
+		canBeFunctionDeclaration: isFunctionLike(declaration.initializer)
 			? canConvertToFunctionDeclaration(
 					declaration.initializer as ts.FunctionLikeDeclaration,
 					context.sourceFile,
@@ -750,7 +741,7 @@ function findContainingFunction(node: ts.Node, sourceFile: ts.SourceFile): strin
 			return current.name.getText(sourceFile);
 		}
 		const variableDeclarationName = checkVariableDeclaration(current, node, sourceFile);
-		if (variableDeclarationName !== undefined) {
+		if (variableDeclarationName !== null) {
 			return variableDeclarationName;
 		}
 		current = current.parent;
@@ -763,13 +754,13 @@ function checkVariableDeclaration(
 	current: ts.Node,
 	node: ts.Node,
 	sourceFile: ts.SourceFile,
-): string | null | undefined {
+): string | null {
 	if (!ts.isVariableStatement(current)) {
-		return undefined;
+		return null;
 	}
 
 	for (const declaration of current.declarationList.declarations) {
-		if (declaration.initializer && isArrowFunctionOrFunctionExpression(declaration.initializer)) {
+		if (declaration.initializer && isFunctionLike(declaration.initializer)) {
 			const funcStart = declaration.initializer.getStart();
 			const funcEnd = declaration.initializer.getEnd();
 			const nodeStart = node.getStart();
@@ -780,7 +771,7 @@ function checkVariableDeclaration(
 		}
 	}
 
-	return undefined;
+	return null;
 }
 
 function collectSourceFileFunctionNames(sourceFile: ts.SourceFile): Set<string> {
@@ -807,10 +798,6 @@ function hasNoThisKeyword(node: ts.Node): boolean {
 		}
 	}
 	return true;
-}
-
-function isArrowFunctionOrFunctionExpression(node: ts.Node): boolean {
-	return ts.isArrowFunction(node) || ts.isFunctionExpression(node);
 }
 
 function hasExportModifier(node: ts.Node): boolean {

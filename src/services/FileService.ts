@@ -1,4 +1,3 @@
-import { readFileSync, writeFileSync } from "node:fs";
 import { glob } from "glob";
 import ts from "typescript";
 import type { FileServiceOptions, IFileService, ParsedFile } from "./types";
@@ -21,8 +20,8 @@ export class FileService implements IFileService {
 		return [...new Set(allFiles)].sort((a, b) => a.localeCompare(b));
 	}
 
-	parseFile(filePath: string): ParsedFile {
-		const content = this.readFile(filePath);
+	async parseFile(filePath: string): Promise<ParsedFile> {
+		const content = await this.readFile(filePath);
 		return this.parseContent(content, filePath);
 	}
 
@@ -31,11 +30,11 @@ export class FileService implements IFileService {
 		return { sourceFile, filePath, content };
 	}
 
-	readFile(filePath: string): string {
-		return readFileSync(filePath, "utf-8");
+	async readFile(filePath: string): Promise<string> {
+		return await Bun.file(filePath).text();
 	}
 
-	writeFile(filePath: string, content: string): void {
-		writeFileSync(filePath, content, "utf-8");
+	async writeFile(filePath: string, content: string): Promise<void> {
+		await Bun.write(filePath, content);
 	}
 }

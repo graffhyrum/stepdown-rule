@@ -12,8 +12,8 @@ export interface ParsedFile {
 
 export interface IFileService {
 	resolveFiles(patterns: string[]): Promise<string[]>;
-	parseFile(filePath: string): ParsedFile;
+	parseFile(filePath: string): Promise<ParsedFile>;
 	parseContent(content: string, filePath: string): ParsedFile;
-	writeFile(filePath: string, content: string): void;
-	readFile(filePath: string): string;
+	writeFile(filePath: string, content: string): Promise<void>;
+	readFile(filePath: string): Promise<string>;
 }

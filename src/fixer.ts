@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { analyzeFiles } from "./analyzer";
+import { isFunctionLike } from "./ast-utils";
 import { FileService } from "./services/FileService";
 import type { AnalysisResult, Config, FixResult } from "./types";
 
@@ -13,18 +14,18 @@ export async function fixFiles(
 	const fixResults: FixResult[] = [];
 
 	for (const result of analysisResults) {
-		const fixResult = processAnalysisResult(result, config, service);
+		const fixResult = await processAnalysisResult(result, config, service);
 		fixResults.push(fixResult);
 	}
 
 	return fixResults;
 }
 
-function processAnalysisResult(
+async function processAnalysisResult(
 	result: Awaited<ReturnType<typeof analyzeFiles>>[0],
 	config: Config,
 	service: FileService,
-): FixResult {
+): Promise<FixResult> {
 	if (result.violations.length === 0 && result.circularDependencies.length === 0) {
 		return createNoViolationsResult(result.file);
 	}
@@ -33,7 +34,7 @@ function processAnalysisResult(
 		return createCircularDependencyResult(result.file, result.circularDependencies.length);
 	}
 
-	return fixFileWithErrorHandling({
+	return await fixFileWithErrorHandling({
 		filePath: result.file,
 		config,
 		service,
@@ -42,59 +43,53 @@ function processAnalysisResult(
 }
 
 function createNoViolationsResult(file: string): FixResult {
-	return {
-		file,
-		fixed: false,
-		originalContent: "",
-		fixedContent: "",
-		reordered: 0,
-		errors: [],
-	};
+	return createUnfixedResult(file, []);
 }
 
 function createCircularDependencyResult(file: string, count: number): FixResult {
+	return createUnfixedResult(file, [
+		`Cannot fix: ${count} circular dependencies detected. Refactoring required.`,
+	]);
+}
+
+async function fixFileWithErrorHandling(params: {
+	filePath: string;
+	config: Config;
+	service: FileService;
+	analysisResult: AnalysisResult;
+}): Promise<FixResult> {
+	try {
+		return await fixFile(params);
+	} catch (error) {
+		return createUnfixedResult(params.filePath, [
+			error instanceof Error ? error.message : String(error),
+		]);
+	}
+}
+
+function createUnfixedResult(file: string, errors: string[] = []): FixResult {
 	return {
 		file,
 		fixed: false,
 		originalContent: "",
 		fixedContent: "",
 		reordered: 0,
-		errors: [`Cannot fix: ${count} circular dependencies detected. Refactoring required.`],
+		errors,
 	};
 }
 
-function fixFileWithErrorHandling(params: {
+async function fixFile(params: {
 	filePath: string;
 	config: Config;
 	service: FileService;
 	analysisResult: AnalysisResult;
-}): FixResult {
-	try {
-		return fixFile(params);
-	} catch (error) {
-		return {
-			file: params.filePath,
-			fixed: false,
-			originalContent: "",
-			fixedContent: "",
-			reordered: 0,
-			errors: [error instanceof Error ? error.message : String(error)],
-		};
-	}
-}
-
-function fixFile(params: {
-	filePath: string;
-	config: Config;
-	service: FileService;
-	analysisResult: AnalysisResult;
-}): FixResult {
+}): Promise<FixResult> {
 	const { filePath, config, service, analysisResult } = params;
-	const originalContent = service.readFile(filePath);
+	const originalContent = await service.readFile(filePath);
 	const fixResult = fixParsedFile({ content: originalContent, filePath, config, analysisResult });
 
 	if (fixResult.fixed) {
-		service.writeFile(filePath, fixResult.fixedContent);
+		await service.writeFile(filePath, fixResult.fixedContent);
 	}
 
 	return fixResult;
@@ -175,30 +170,31 @@ function visitForNestedBlocks(node: ts.Node, sourceFile: ts.SourceFile): ts.Node
 }
 
 function tryReorderArrowOrFunctionExpr(node: ts.Node, sourceFile: ts.SourceFile): ts.Node | null {
-	if (!(ts.isArrowFunction(node) || ts.isFunctionExpression(node))) return null;
-	const body = node.body;
+	if (!isFunctionLike(node)) return null;
+	const fn = node as ts.ArrowFunction | ts.FunctionExpression;
+	const body = fn.body;
 	if (!ts.isBlock(body) || body.statements.length < 2) return null;
 	const reordered = reorderBlockStatements(body, sourceFile);
 	if (!reordered) return null;
-	if (ts.isArrowFunction(node)) {
+	if (ts.isArrowFunction(fn)) {
 		return ts.factory.updateArrowFunction(
-			node,
-			node.modifiers,
-			node.typeParameters,
-			node.parameters,
-			node.type,
-			node.equalsGreaterThanToken,
+			fn,
+			fn.modifiers,
+			fn.typeParameters,
+			fn.parameters,
+			fn.type,
+			fn.equalsGreaterThanToken,
 			reordered,
 		);
 	}
 	return ts.factory.updateFunctionExpression(
-		node,
-		node.modifiers,
-		node.asteriskToken,
-		node.name,
-		node.typeParameters,
-		node.parameters,
-		node.type,
+		fn,
+		fn.modifiers,
+		fn.asteriskToken,
+		fn.name,
+		fn.typeParameters,
+		fn.parameters,
+		fn.type,
 		reordered,
 	);
 }
@@ -244,7 +240,7 @@ function visitVariableStatementNested(
 
 function visitCallExpressionNested(node: ts.CallExpression, sourceFile: ts.SourceFile): ts.Node {
 	const newArgs = node.arguments.map((arg) => {
-		if (!(ts.isFunctionExpression(arg) || ts.isArrowFunction(arg))) return arg;
+		if (!isFunctionLike(arg)) return arg;
 		return visitForNestedBlocks(arg, sourceFile) as ts.Expression;
 	});
 	const changed = newArgs.some((a, i) => a !== node.arguments[i]);
@@ -304,7 +300,7 @@ function extractStatementFunctionName(
 			decl?.name &&
 			ts.isIdentifier(decl.name) &&
 			decl.initializer &&
-			isFunctionExpression(decl.initializer)
+			isFunctionLike(decl.initializer)
 		) {
 			return decl.name.getText(sourceFile);
 		}
@@ -363,7 +359,7 @@ function categorizeNode(node: ts.Node, result: CategorizedNodes): void {
 function categorizeVariableStatement(node: ts.VariableStatement, result: CategorizedNodes): void {
 	const { declarationList } = node;
 	for (const declaration of declarationList.declarations) {
-		if (declaration.initializer && isFunctionExpression(declaration.initializer)) {
+		if (declaration.initializer && isFunctionLike(declaration.initializer)) {
 			result.functions.push({ node, info: null });
 			return;
 		}
@@ -539,7 +535,7 @@ function isFunctionSignature(trimmed: string): boolean {
 // UTILITIES
 function extractFunctionName(node: ts.Node, sourceFile: ts.SourceFile): string | null {
 	if (ts.isFunctionDeclaration(node) && node.name) {
-		return node.name?.getText(sourceFile);
+		return node.name.getText(sourceFile);
 	}
 
 	if (ts.isVariableStatement(node)) {
@@ -550,10 +546,6 @@ function extractFunctionName(node: ts.Node, sourceFile: ts.SourceFile): string |
 	}
 
 	return null;
-}
-
-function isFunctionExpression(node: ts.Node): boolean {
-	return ts.isArrowFunction(node) || ts.isFunctionExpression(node);
 }
 
 interface CategorizedNodes {

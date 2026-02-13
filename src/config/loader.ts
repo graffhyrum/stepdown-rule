@@ -1,5 +1,5 @@
 import { type } from "arktype";
-import { FileConfigSchema } from "../config/schema";
+import { ConfigSchema, FileConfigSchema } from "./schema";
 
 export async function loadConfig(configPath?: string): Promise<typeof FileConfigSchema.infer> {
 	const defaultConfig = {
@@ -40,6 +40,6 @@ export function getConfigJsonSchema(): object {
 	return FileConfigSchema.toJsonSchema();
 }
 
-export async function getFullConfigJsonSchema(): Promise<object> {
-	return (await import("../config/schema")).ConfigSchema.toJsonSchema();
+export function getFullConfigJsonSchema(): object {
+	return ConfigSchema.toJsonSchema();
 }
