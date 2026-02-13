@@ -225,7 +225,7 @@ const c = () => "leaf";
 	cleanupTestDir();
 });
 
-test("96h: bead fixtures (mutual-pairs, cart, topo, arrow-chain, factory-refs, rate-limit, container-di) must converge", async () => {
+test("96h/1e0: bead fixtures (mutual-pairs, cart, topo, arrow-chain, factory-refs, rate-limit, container-di, factory-method-calls) must converge", async () => {
 	const fixtures = [
 		"fixtures/test-mutual-pairs.ts",
 		"fixtures/test-cart-pingpong.ts",
@@ -234,6 +234,7 @@ test("96h: bead fixtures (mutual-pairs, cart, topo, arrow-chain, factory-refs, r
 		"fixtures/test-factory-refs.ts",
 		"fixtures/test-rate-limit-pattern.ts",
 		"fixtures/test-container-di.ts",
+		"fixtures/test-factory-method-calls.ts",
 	];
 
 	for (const fixture of fixtures) {

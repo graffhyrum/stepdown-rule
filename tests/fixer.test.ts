@@ -84,6 +84,26 @@ function main() {
 	cleanupTestDir();
 });
 
+test("should fix factory with method calling helper (1e0): dep inside returned object method body", async () => {
+	setupTestDir();
+	const filePath = createTestFile(
+		"test-factory-method.ts",
+		readFileSync("fixtures/test-factory-method-calls.ts", "utf-8"),
+	);
+
+	const results = await fixFiles([filePath], defaultConfig);
+
+	expect(results).toHaveLength(1);
+	expect(results[0]?.fixed).toBe(true);
+	expect(results[0]?.errors).toHaveLength(0);
+
+	const { analyzeFiles } = await import("../src/analyzer");
+	const [analysis] = await analyzeFiles([filePath], defaultConfig);
+	expect(analysis?.violations.length).toBe(0);
+
+	cleanupTestDir();
+});
+
 test("should fix arrow const chain (27g): mapValidOrders/parseSingleOrder call validateAndParseOrder", async () => {
 	setupTestDir();
 	const filePath = createTestFile(
