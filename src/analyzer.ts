@@ -421,7 +421,7 @@ function isReferencedInFunctionBody(
 
 	// Check if the nested function is referenced anywhere in the function body,
 	// excluding the nested function's own declaration
-	return containsIdentifierExcludingNestedDeclaration(functionNode.body, nestedName, sourceFile);
+	return findIdentifierExcludingDefinitions(functionNode.body, nestedName, sourceFile);
 }
 
 function findFunctionNode(
@@ -445,28 +445,52 @@ function findFunctionNode(
 	return visit(sourceFile);
 }
 
-function containsIdentifierExcludingNestedDeclaration(
+function isFunctionDefinition(node: ts.Node, name: string, sourceFile: ts.SourceFile): boolean {
+	return ts.isFunctionDeclaration(node) && node.name?.getText(sourceFile) === name;
+}
+
+function isVariableFunctionDefinition(
 	node: ts.Node,
 	name: string,
 	sourceFile: ts.SourceFile,
 ): boolean {
-	// Skip function declarations and variable declarations that define the function we're looking for
-	if (ts.isFunctionDeclaration(node) && node.name && node.name.getText(sourceFile) === name) {
+	if (!ts.isVariableStatement(node)) {
 		return false;
 	}
-	if (ts.isVariableStatement(node)) {
-		for (const decl of node.declarationList.declarations) {
-			if (decl.name && ts.isIdentifier(decl.name) && decl.name.getText(sourceFile) === name) {
-				return false;
-			}
+
+	for (const decl of node.declarationList.declarations) {
+		const isMatchingIdentifier =
+			decl.name && ts.isIdentifier(decl.name) && decl.name.getText(sourceFile) === name;
+		if (isMatchingIdentifier) {
+			return true;
 		}
 	}
+	return false;
+}
 
-	if (ts.isIdentifier(node) && node.getText(sourceFile) === name) {
+function matchesIdentifier(node: ts.Node, name: string, sourceFile: ts.SourceFile): boolean {
+	return ts.isIdentifier(node) && node.getText(sourceFile) === name;
+}
+
+function findIdentifierExcludingDefinitions(
+	node: ts.Node,
+	name: string,
+	sourceFile: ts.SourceFile,
+): boolean {
+	if (isFunctionDefinition(node, name, sourceFile)) {
+		return false;
+	}
+
+	if (isVariableFunctionDefinition(node, name, sourceFile)) {
+		return false;
+	}
+
+	if (matchesIdentifier(node, name, sourceFile)) {
 		return true;
 	}
+
 	for (const child of node.getChildren()) {
-		if (containsIdentifierExcludingNestedDeclaration(child, name, sourceFile)) {
+		if (findIdentifierExcludingDefinitions(child, name, sourceFile)) {
 			return true;
 		}
 	}
