@@ -1,24 +1,29 @@
-import { readFileSync, writeFileSync } from "node:fs";
 import ts from "typescript";
 import { analyzeFiles } from "./analyzer";
+import { FileService } from "./services/FileService";
 import type { Config, FixResult } from "./types";
 
-export async function fixFiles(patterns: string[], config: Config): Promise<FixResult[]> {
+export async function fixFiles(
+	patterns: string[],
+	config: Config,
+	fileService?: FileService,
+): Promise<FixResult[]> {
+	const service = fileService ?? new FileService({ ignore: config.ignore });
 	const analysisResults = await analyzeFiles(patterns, config);
 	const fixResults: FixResult[] = [];
 
 	for (const result of analysisResults) {
-		const fixResult = processAnalysisResult(result, config);
+		const fixResult = processAnalysisResult(result, config, service);
 		fixResults.push(fixResult);
 	}
 
 	return fixResults;
 }
 
-// ORCHESTRATION: high-level decision logic
 function processAnalysisResult(
 	result: Awaited<ReturnType<typeof analyzeFiles>>[0],
 	config: Config,
+	service: FileService,
 ): FixResult {
 	if (result.violations.length === 0 && result.circularDependencies.length === 0) {
 		return createNoViolationsResult(result.file);
@@ -28,7 +33,7 @@ function processAnalysisResult(
 		return createCircularDependencyResult(result.file, result.circularDependencies.length);
 	}
 
-	return fixFileWithErrorHandling(result.file, config);
+	return fixFileWithErrorHandling(result.file, config, service);
 }
 
 function createNoViolationsResult(file: string): FixResult {
@@ -53,9 +58,13 @@ function createCircularDependencyResult(file: string, count: number): FixResult 
 	};
 }
 
-function fixFileWithErrorHandling(filePath: string, config: Config): FixResult {
+function fixFileWithErrorHandling(
+	filePath: string,
+	config: Config,
+	service: FileService,
+): FixResult {
 	try {
-		return fixFile(filePath, config);
+		return fixFile(filePath, config, service);
 	} catch (error) {
 		return {
 			file: filePath,
@@ -68,36 +77,30 @@ function fixFileWithErrorHandling(filePath: string, config: Config): FixResult {
 	}
 }
 
-// FILE PROCESSING: I/O operations
-const fileProcessor = createFileProcessor();
+function fixFile(filePath: string, _config: Config, service: FileService): FixResult {
+	const originalContent = service.readFile(filePath);
+	const fixResult = fixParsedFile(originalContent, filePath, _config);
 
-function createFileProcessor() {
-	return {
-		read(filePath: string): string {
-			return readFileSync(filePath, "utf-8");
-		},
-		write(filePath: string, content: string): void {
-			writeFileSync(filePath, content, "utf-8");
-		},
-	};
+	if (fixResult.fixed) {
+		service.writeFile(filePath, fixResult.fixedContent);
+	}
+
+	return fixResult;
 }
 
-// REORDERING ORCHESTRATION
-function fixFile(filePath: string, _config: Config): FixResult {
-	const originalContent = fileProcessor.read(filePath);
-	const sourceFile = ts.createSourceFile(filePath, originalContent, ts.ScriptTarget.Latest, true);
+export function fixParsedFile(content: string, filePath: string, _config: Config): FixResult {
+	const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
 
 	const fixedContent = reorderFunctionDeclarations(sourceFile);
-	const hasChanges = fixedContent !== originalContent;
+	const hasChanges = fixedContent !== content;
 
 	if (hasChanges) {
-		fileProcessor.write(filePath, fixedContent);
 		return {
 			file: filePath,
 			fixed: true,
-			originalContent,
+			originalContent: content,
 			fixedContent,
-			reordered: countFunctionMovements(originalContent, fixedContent),
+			reordered: countFunctionMovements(content, fixedContent),
 			errors: [],
 		};
 	}
@@ -105,7 +108,7 @@ function fixFile(filePath: string, _config: Config): FixResult {
 	return {
 		file: filePath,
 		fixed: false,
-		originalContent,
+		originalContent: content,
 		fixedContent,
 		reordered: 0,
 		errors: [],
