@@ -225,6 +225,41 @@ const c = () => "leaf";
 	cleanupTestDir();
 });
 
+test("77q: ff-elysia integration - fix→analyze converges when project available", async () => {
+	const ffElysiaPath = process.env.FF_ELYSIA_PATH ?? join(process.cwd(), "..", "ff-elysia");
+	const fs = await import("node:fs");
+	const { cpSync, rmSync, mkdirSync } = await import("node:fs");
+	if (!fs.existsSync(ffElysiaPath)) return;
+
+	setupTestDir();
+	const tmpDir = join(TEST_DIR, "ff-elysia-copy");
+	rmSync(tmpDir, { recursive: true, force: true });
+	mkdirSync(tmpDir, { recursive: true });
+	cpSync(join(ffElysiaPath, "src"), join(tmpDir, "src"), { recursive: true });
+
+	const patterns = [join(tmpDir, "src", "**", "*.ts")];
+	const FileServiceClass = (await import("../src/services/FileService")).FileService;
+	const service = new FileServiceClass({ ignore: [] });
+	const files = await service.resolveFiles(patterns);
+	if (files.length === 0) return;
+
+	const config = { ...defaultConfig, fix: true };
+	let prevViolations = Number.POSITIVE_INFINITY;
+	for (let i = 0; i < 15; i++) {
+		const results = await analyzeFiles(patterns, config, service);
+		const count = results.reduce(
+			(sum, r) => sum + (r.violations?.length ?? 0) + (r.nestedFunctionViolations?.length ?? 0),
+			0,
+		);
+		expect(count).toBeLessThanOrEqual(prevViolations);
+		prevViolations = count;
+		if (count === 0) break;
+		await fixFiles(patterns, config, service);
+	}
+	expect(prevViolations).toBe(0);
+	rmSync(tmpDir, { recursive: true, force: true });
+});
+
 test("96h/1e0/27g: bead fixtures (mutual-pairs, cart, topo, arrow-chain, order-repo-27g, factory-refs, rate-limit, container-di, factory-method-calls) must converge", async () => {
 	const fixtures = [
 		"fixtures/test-mutual-pairs.ts",
