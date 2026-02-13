@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { analyzeFiles } from "../src/analyzer";
 import { fixFiles } from "../src/fixer";
 import type { Config } from "../src/types";
 
@@ -198,4 +199,56 @@ function helper() {
 	expect(content).toBe(originalContent);
 
 	cleanupTestDir();
+});
+
+test("96h: fix→analyze loop must not increase violations (convergence)", async () => {
+	setupTestDir();
+
+	const code = `
+const a = () => b();
+const b = () => c();
+const c = () => "leaf";
+`;
+	const filePath = createTestFile("test-convergence.ts", code);
+
+	let prevViolations = Number.POSITIVE_INFINITY;
+	for (let i = 0; i < 5; i++) {
+		const [result] = await analyzeFiles([filePath], defaultConfig);
+		const count = (result?.violations.length ?? 0) + (result?.nestedFunctionViolations.length ?? 0);
+		expect(count).toBeLessThanOrEqual(prevViolations);
+		prevViolations = count;
+		if (count === 0) break;
+		await fixFiles([filePath], defaultConfig);
+	}
+
+	expect(prevViolations).toBe(0);
+	cleanupTestDir();
+});
+
+test("96h: bead fixtures (mutual-pairs, cart, topo) must converge", async () => {
+	const fixtures = [
+		"fixtures/test-mutual-pairs.ts",
+		"fixtures/test-cart-pingpong.ts",
+		"fixtures/test-topo-order-sensitive.ts",
+	];
+
+	for (const fixture of fixtures) {
+		const content = readFileSync(fixture, "utf-8");
+		setupTestDir();
+		const filePath = createTestFile("bead-fixture.ts", content);
+
+		let prevViolations = Number.POSITIVE_INFINITY;
+		for (let i = 0; i < 5; i++) {
+			const [result] = await analyzeFiles([filePath], defaultConfig);
+			const count =
+				(result?.violations.length ?? 0) + (result?.nestedFunctionViolations.length ?? 0);
+			expect(count).toBeLessThanOrEqual(prevViolations);
+			prevViolations = count;
+			if (count === 0) break;
+			await fixFiles([filePath], defaultConfig);
+		}
+
+		expect(prevViolations).toBe(0);
+		cleanupTestDir();
+	}
 });
