@@ -1,5 +1,7 @@
 import ts from "typescript";
 import { getPosition, getPositionFromOffset, isFunctionLike } from "./ast-utils";
+import { getEnabled } from "./registry";
+import type { RuleContext, Violation } from "./rule-context";
 import { FileService } from "./services/FileService";
 import type { ParsedFile } from "./services/types";
 import type {
@@ -18,15 +20,74 @@ export async function analyzeFiles(
 ): Promise<AnalysisResult[]> {
 	const service = fileService ?? new FileService({ ignore: config.ignore });
 	const files = await service.resolveFiles(patterns);
+	const enabledRules = getEnabled(config.enabledRuleIds);
 	const results: AnalysisResult[] = [];
+	const useRulePipeline = config.enabledRuleIds !== undefined && enabledRules.length > 0;
 
 	for (const filePath of files) {
 		const parsedFile = await service.parseFile(filePath);
-		const result = analyzeParsedFile(parsedFile);
+		const result = useRulePipeline
+			? analyzeWithRules(parsedFile, enabledRules)
+			: analyzeParsedFile(parsedFile);
 		results.push(result);
 	}
 
 	return results;
+}
+
+export function buildRuleContext(parsedFile: ParsedFile): RuleContext {
+	const { sourceFile } = parsedFile;
+	const functions = extractFunctions(sourceFile);
+	const callGraph = buildCallGraph(functions, sourceFile);
+	const dependencyGraph = callGraphToDependencyMap(callGraph);
+	return {
+		parsedFile,
+		functions,
+		callGraph,
+		dependencyGraph,
+	};
+}
+
+export function findStepdownViolations(ctx: RuleContext): StepdownViolation[] {
+	const violations = findViolations(ctx.functions, ctx.callGraph);
+	const circular = detectCircularDependencies(ctx.functions, ctx.callGraph);
+	return filterOutCircularViolations(violations, circular);
+}
+
+export function findNestedViolations(ctx: RuleContext): NestedFunctionViolation[] {
+	return findNestedFunctionViolations(ctx.parsedFile.sourceFile, ctx.functions);
+}
+
+export function analyzeWithRules(
+	parsedFile: ParsedFile,
+	enabledRules: { analyze(ctx: RuleContext): Violation[] }[],
+): AnalysisResult {
+	const ctx = buildRuleContext(parsedFile);
+	const allViolations: Violation[] = [];
+	for (const rule of enabledRules) {
+		allViolations.push(...rule.analyze(ctx));
+	}
+	return violationsToAnalysisResult(ctx, allViolations);
+}
+
+function isStepdownViolation(v: Violation): v is StepdownViolation {
+	return "dependency" in v;
+}
+
+function violationsToAnalysisResult(ctx: RuleContext, violations: Violation[]): AnalysisResult {
+	const stepdownViolations = violations.filter(isStepdownViolation);
+	const nestedFunctionViolations = violations.filter(
+		(v): v is NestedFunctionViolation => "nested" in v,
+	);
+	const circularDependencies = detectCircularDependencies(ctx.functions, ctx.callGraph);
+	return {
+		file: ctx.parsedFile.filePath,
+		violations: stepdownViolations,
+		nestedFunctionViolations,
+		circularDependencies,
+		totalFunctions: ctx.functions.length,
+		dependencyGraph: ctx.dependencyGraph,
+	};
 }
 
 export function analyzeParsedFile(parsedFile: ParsedFile): AnalysisResult {

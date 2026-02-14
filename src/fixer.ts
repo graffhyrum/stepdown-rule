@@ -1,28 +1,127 @@
 import ts from "typescript";
-import { analyzeFiles } from "./analyzer";
+import { analyzeParsedFile, analyzeWithRules, buildRuleContext } from "./analyzer";
 import { isFunctionLike } from "./ast-utils";
+import { getEnabled } from "./registry";
+import type { ViolationRule } from "./rule-context";
 import { FileService } from "./services/FileService";
 import type { AnalysisResult, Config, FixResult } from "./types";
+
+export interface PipelineResult {
+	analysisResults: AnalysisResult[];
+	fixResults: FixResult[];
+}
+
+export async function runPipeline(
+	patterns: string[],
+	config: Config,
+	fileService?: FileService,
+): Promise<PipelineResult> {
+	const service = fileService ?? new FileService({ ignore: config.ignore });
+	const files = await service.resolveFiles(patterns);
+	const enabledRules = getEnabled(config.enabledRuleIds);
+	const useRulePipeline = config.enabledRuleIds !== undefined && enabledRules.length > 0;
+
+	const analysisResults: AnalysisResult[] = [];
+	const fixResults: FixResult[] = [];
+
+	for (const filePath of files) {
+		const { analysisResult, fixResult } = await processOneFile({
+			filePath,
+			config,
+			service,
+			enabledRules,
+			useRulePipeline,
+		});
+		analysisResults.push(analysisResult);
+		if (config.fix && fixResult) {
+			fixResults.push(fixResult);
+		}
+	}
+
+	return { analysisResults, fixResults };
+}
+
+async function processOneFile(params: {
+	filePath: string;
+	config: Config;
+	service: FileService;
+	enabledRules: ViolationRule[];
+	useRulePipeline: boolean;
+}): Promise<{ analysisResult: AnalysisResult; fixResult: FixResult | null }> {
+	const { filePath, config, service, enabledRules, useRulePipeline } = params;
+	const parsedFile = await service.parseFile(filePath);
+	const analysisResult = useRulePipeline
+		? analyzeWithRules(parsedFile, enabledRules)
+		: analyzeParsedFile(parsedFile);
+
+	if (!config.fix) {
+		return { analysisResult, fixResult: null };
+	}
+
+	if (useRulePipeline) {
+		const content = await service.readFile(filePath);
+		const result = fixFileWithRules({
+			filePath,
+			originalContent: content,
+			enabledRules,
+			service,
+		});
+		if (result.fixed) {
+			await service.writeFile(filePath, result.fixedContent);
+		}
+		return { analysisResult, fixResult: result };
+	}
+
+	const fixResult = await processAndFixLegacy(analysisResult, config, service);
+	return { analysisResult, fixResult };
+}
+
+function processAndFixLegacy(
+	result: AnalysisResult,
+	config: Config,
+	service: FileService,
+): Promise<FixResult> {
+	return processAnalysisResult(result, config, service);
+}
 
 export async function fixFiles(
 	patterns: string[],
 	config: Config,
 	fileService?: FileService,
 ): Promise<FixResult[]> {
-	const service = fileService ?? new FileService({ ignore: config.ignore });
-	const analysisResults = await analyzeFiles(patterns, config, service);
-	const fixResults: FixResult[] = [];
-
-	for (const result of analysisResults) {
-		const fixResult = await processAnalysisResult(result, config, service);
-		fixResults.push(fixResult);
-	}
-
+	const { fixResults } = await runPipeline(patterns, { ...config, fix: true }, fileService);
 	return fixResults;
 }
 
+export function fixFileWithRules(params: {
+	filePath: string;
+	originalContent: string;
+	enabledRules: ViolationRule[];
+	service: FileService;
+}): FixResult {
+	const { filePath, originalContent, enabledRules, service } = params;
+	let content = originalContent;
+	for (const rule of enabledRules) {
+		const parsedFile = service.parseContent(content, filePath);
+		const ctx = buildRuleContext(parsedFile);
+		const violations = rule.analyze(ctx);
+		if (violations.length > 0) {
+			content = rule.fix(ctx, violations);
+		}
+	}
+	const fixed = content !== originalContent;
+	return {
+		file: filePath,
+		fixed,
+		originalContent,
+		fixedContent: content,
+		reordered: fixed ? countFunctionMovements(originalContent, content) : 0,
+		errors: [],
+	};
+}
+
 async function processAnalysisResult(
-	result: Awaited<ReturnType<typeof analyzeFiles>>[0],
+	result: AnalysisResult,
 	config: Config,
 	service: FileService,
 ): Promise<FixResult> {
@@ -78,7 +177,7 @@ function createUnfixedResult(file: string, errors: string[] = []): FixResult {
 	};
 }
 
-async function fixFile(params: {
+export async function fixFile(params: {
 	filePath: string;
 	config: Config;
 	service: FileService;
@@ -128,11 +227,27 @@ export function fixParsedFile(params: {
 	};
 }
 
+const defaultPrinter = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
+
+export function reorderTopLevelOnly(
+	sourceFile: ts.SourceFile,
+	dependencyGraph: Map<string, string[]>,
+): string {
+	const categorized = categorizeNodes(sourceFile);
+	const reorderedFunctions = reorderFunctions(categorized.functions, dependencyGraph, sourceFile);
+	const newStatements = reconstructStatements(categorized, reorderedFunctions);
+	const newSourceFile = ts.factory.updateSourceFile(sourceFile, newStatements);
+	return defaultPrinter.printFile(newSourceFile);
+}
+
+export function applyNestedOnly(sourceFile: ts.SourceFile): string {
+	return defaultPrinter.printFile(transformNestedBlocks(sourceFile));
+}
+
 function reorderFunctionDeclarations(
 	sourceFile: ts.SourceFile,
 	analyzerDependencyGraph?: Map<string, string[]>,
 ): string {
-	const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
 	const categorized = categorizeNodes(sourceFile);
 
 	const dependencies =
@@ -144,7 +259,7 @@ function reorderFunctionDeclarations(
 
 	newSourceFile = transformNestedBlocks(newSourceFile);
 
-	return printer.printFile(newSourceFile);
+	return defaultPrinter.printFile(newSourceFile);
 }
 
 function transformNestedBlocks(sourceFile: ts.SourceFile): ts.SourceFile {
