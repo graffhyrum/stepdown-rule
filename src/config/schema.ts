@@ -19,6 +19,7 @@ export const ConfigSchema = type({
 	fix: ["boolean", "=", false],
 	json: ["boolean", "=", false],
 	outputFile: "string?",
+	enabledRuleIds: "string[]?",
 });
 
 export type Config = typeof ConfigSchema.infer;

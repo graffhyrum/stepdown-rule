@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import "./register-default-rules";
 import { Command } from "commander";
 import picocolors from "picocolors";
 import { analyzeFiles } from "./analyzer";
@@ -19,6 +20,7 @@ program
 	.option("--ignore <patterns...>", "Additional ignore patterns")
 	.option("--config <file>", "Configuration file path", ".stepdownrc.json")
 	.option("--verbose", "Show circular dependencies in output", false)
+	.option("--rules <ids>", "Comma-separated rule ids to run (default: all)")
 	.action(async (patterns: string[], options) => {
 		const config = await createConfig(options);
 		try {
@@ -40,8 +42,15 @@ async function createConfig(options: {
 	json?: boolean;
 	outputFile?: string;
 	config?: string;
+	rules?: string;
 }): Promise<Config> {
 	const fileConfig = await loadConfig(options.config);
+	const enabledRuleIds = options.rules
+		? options.rules
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean)
+		: undefined;
 	return {
 		ignore: options.ignore ?? fileConfig.ignore,
 		analyzeArrowFunctions: fileConfig.analyzeArrowFunctions,
@@ -50,6 +59,7 @@ async function createConfig(options: {
 		fix: options.fix ?? false,
 		json: options.json ?? false,
 		outputFile: options.outputFile,
+		enabledRuleIds,
 	};
 }
 
