@@ -1,6 +1,16 @@
 import ts from "typescript";
 import { analyzeParsedFile, analyzeWithRules, buildRuleContext } from "./analyzer";
+import {
+	buildDependencyGraph,
+	extractDependenciesFor,
+	extractFunctionName,
+} from "./ast-graph-builder";
+import { categorizeNodes, reconstructStatements } from "./ast-node-visitors";
 import { isFunctionLike } from "./ast-utils";
+import {
+	findAndRemoveLeafFunctions,
+	topologicalSort as sortTopologically,
+} from "./graph-algorithms";
 import { getEnabled } from "./registry";
 import type { ViolationRule } from "./rule-context";
 import { FileService } from "./services/FileService";
@@ -375,7 +385,7 @@ function reorderBlockStatements(block: ts.Block, sourceFile: ts.SourceFile): ts.
 	for (const [i, { name }] of funcStatements.entries()) {
 		blockSourceOrder.set(name, i);
 	}
-	const sorted = topologicalSort(dependencies, blockSourceOrder).reverse();
+	const sorted = sortTopologically(dependencies, blockSourceOrder).reverse();
 	const reorderedStmts = sorted
 		.map((n) => funcStatements.find((f) => f.name === n)?.stmt)
 		.filter((s): s is ts.Statement => s !== undefined);
@@ -412,126 +422,9 @@ function extractStatementFunctionName(
 	return null;
 }
 
-function reconstructStatements(
-	categorized: CategorizedNodes,
-	reorderedFunctions: Array<{ node: ts.Node; info: null }>,
-): ts.Statement[] {
-	return [
-		...(categorized.imports as ts.Statement[]),
-		...reorderedFunctions.map((f) => f.node as ts.Statement),
-		...(categorized.other as ts.Statement[]),
-		...(categorized.exports as ts.Statement[]),
-	];
-}
-
-// CATEGORIZATION: classify AST nodes
-function categorizeNodes(sourceFile: ts.SourceFile): CategorizedNodes {
-	const result: CategorizedNodes = {
-		imports: [],
-		functions: [],
-		exports: [],
-		other: [],
-	};
-	ts.forEachChild(sourceFile, (node) => categorizeNode(node, result));
-	return result;
-}
-
-function categorizeNode(node: ts.Node, result: CategorizedNodes): void {
-	if (isImport(node)) {
-		result.imports.push(node);
-		return;
-	}
-
-	if (isExport(node)) {
-		result.exports.push(node);
-		return;
-	}
-
-	if (isFunctionDeclaration(node)) {
-		result.functions.push({ node, info: null });
-		return;
-	}
-
-	if (ts.isVariableStatement(node)) {
-		categorizeVariableStatement(node, result);
-		return;
-	}
-
-	result.other.push(node);
-}
-
-function categorizeVariableStatement(node: ts.VariableStatement, result: CategorizedNodes): void {
-	const { declarationList } = node;
-	for (const declaration of declarationList.declarations) {
-		if (declaration.initializer && isFunctionLike(declaration.initializer)) {
-			result.functions.push({ node, info: null });
-			return;
-		}
-	}
-	result.other.push(node);
-}
-
-function isImport(node: ts.Node): boolean {
-	return ts.isImportDeclaration(node) || ts.isImportEqualsDeclaration(node);
-}
-
-function isExport(node: ts.Node): boolean {
-	return ts.isExportDeclaration(node);
-}
-
-function isFunctionDeclaration(node: ts.Node): boolean {
-	const hasName = "name" in node && !!node.name;
-	return ts.isFunctionDeclaration(node) && hasName;
-}
-
-// DEPENDENCY GRAPH: extract and map function dependencies
-function buildDependencyGraph(
-	functions: Array<{ node: ts.Node; info: null }>,
-	sourceFile: ts.SourceFile,
-): { functionNames: Map<string, ts.Node>; dependencies: Map<string, string[]> } {
-	const functionNames = new Map<string, ts.Node>();
-	const dependencies = new Map<string, string[]>();
-
-	for (const { node } of functions) {
-		const name = extractFunctionName(node, sourceFile);
-		if (name) functionNames.set(name, node);
-	}
-	for (const { node } of functions) {
-		const name = extractFunctionName(node, sourceFile);
-		if (name) {
-			const deps = extractDependenciesFor(node, sourceFile, functionNames);
-			dependencies.set(name, deps);
-		}
-	}
-
-	return { functionNames, dependencies };
-}
-
-interface DependencyExtractionContext {
-	sourceFile: ts.SourceFile;
-	functionNames: Map<string, ts.Node>;
-	dependencies: string[];
-}
-
-function extractDependenciesFor(
-	node: ts.Node,
-	sourceFile: ts.SourceFile,
-	functionNames: Map<string, ts.Node>,
-): string[] {
-	const context: DependencyExtractionContext = { sourceFile, functionNames, dependencies: [] };
-	visitNodeForDependencies(node, context);
-	return [...new Set(context.dependencies)];
-}
-
-function visitNodeForDependencies(node: ts.Node, context: DependencyExtractionContext): void {
-	if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-		const calledName = node.expression.getText(context.sourceFile);
-		if (context.functionNames.has(calledName)) {
-			context.dependencies.push(calledName);
-		}
-	}
-	ts.forEachChild(node, (child) => visitNodeForDependencies(child, context));
-}
+// CATEGORIZATION: Now uses unified ast-node-visitors module
+// NODE CLASSIFICATION: Moved to ast-node-visitors
+// DEPENDENCY GRAPH: Now uses unified ast-graph-builder module
 
 // TOPOLOGICAL ORDERING: sort functions by dependencies
 function reorderFunctions(
@@ -556,7 +449,7 @@ function reorderFunctions(
 		.map((name) => nameToFunc.get(name))
 		.filter((f): f is { node: ts.Node; info: null } => f !== undefined);
 
-	const sorted = topologicalSort(dependencies, sourceOrder).reverse();
+	const sorted = sortTopologically(dependencies, sourceOrder).reverse();
 	const sortedFunctions = sorted
 		.map((name) => nameToFunc.get(name))
 		.filter((f): f is { node: ts.Node; info: null } => f !== undefined);
@@ -565,90 +458,7 @@ function reorderFunctions(
 	return [...sortedFunctions, ...leafFunctions];
 }
 
-function findAndRemoveLeafFunctions(
-	dependencies: Map<string, string[]>,
-	sourceOrder: Map<string, number>,
-): string[] {
-	// A leaf function is one with no outgoing edges (empty dependencies)
-	const leaves: string[] = [];
-
-	// Collect all leaf function names
-	const leafNames: string[] = [];
-	for (const [name, deps] of dependencies) {
-		if (deps.length === 0) {
-			leafNames.push(name);
-		}
-	}
-
-	// Remove them from the dependency map and collect for later
-	for (const name of leafNames) {
-		dependencies.delete(name);
-		leaves.push(name);
-	}
-
-	// Sort leaves by their original source order
-	leaves.sort((a, b) => (sourceOrder.get(a) ?? 999) - (sourceOrder.get(b) ?? 999));
-
-	return leaves;
-}
-
-function topologicalSort(
-	dependencies: Map<string, string[]>,
-	sourceOrder: Map<string, number>,
-): string[] {
-	const visited = new Set<string>();
-	const temp = new Set<string>();
-	const result: string[] = [];
-
-	const names = [...dependencies.keys()].sort(
-		(a, b) => (sourceOrder.get(a) ?? 999) - (sourceOrder.get(b) ?? 999),
-	);
-	for (const name of names) {
-		if (!visited.has(name)) {
-			visitDependencyNode(name, { dependencies, visited, temp, result, sourceOrder });
-		}
-	}
-
-	// Add any functions that weren't visited (due to cycles) at the end in source order
-	const unvisited = names.filter((name) => !visited.has(name));
-	result.push(...unvisited);
-
-	return result;
-}
-
-interface SortContext {
-	dependencies: Map<string, string[]>;
-	visited: Set<string>;
-	temp: Set<string>;
-	result: string[];
-	sourceOrder: Map<string, number>;
-}
-
-function visitDependencyNode(name: string, context: SortContext): void {
-	if (context.temp.has(name)) {
-		// Cycle detected - silently skip to allow partial ordering
-		// Functions involved in cycles will be placed at the end in original order
-		return;
-	}
-	if (context.visited.has(name)) {
-		return;
-	}
-
-	context.temp.add(name);
-	const deps = context.dependencies.get(name) || [];
-	const orderedDeps = [...deps].sort(
-		(a, b) => (context.sourceOrder.get(a) ?? 999) - (context.sourceOrder.get(b) ?? 999),
-	);
-	for (const dep of orderedDeps) {
-		// Only visit if the dependency is still in the graph (not a leaf we removed)
-		if (context.dependencies.has(dep)) {
-			visitDependencyNode(dep, context);
-		}
-	}
-	context.temp.delete(name);
-	context.visited.add(name);
-	context.result.push(name);
-}
+// Leaf finding and topological sort now use graph-algorithms module
 
 // MOVEMENT COUNTING: quantify function relocations
 function countFunctionMovements(original: string, fixed: string): number {
@@ -687,28 +497,6 @@ function isFunctionSignature(trimmed: string): boolean {
 	);
 }
 
-// UTILITIES
-function extractFunctionName(node: ts.Node, sourceFile: ts.SourceFile): string | null {
-	if (ts.isFunctionDeclaration(node) && node.name) {
-		return node.name.getText(sourceFile);
-	}
-
-	if (ts.isVariableStatement(node)) {
-		const [declaration] = node.declarationList.declarations;
-		if (declaration?.name && ts.isIdentifier(declaration.name)) {
-			return declaration.name.getText(sourceFile);
-		}
-	}
-
-	return null;
-}
-
-interface CategorizedNodes {
-	imports: ts.Node[];
-	functions: Array<{
-		node: ts.Node;
-		info: null;
-	}>;
-	exports: ts.Node[];
-	other: ts.Node[];
-}
+// UTILITIES: Now uses unified modules
+// extractFunctionName and categorization moved to ast-graph-builder and ast-node-visitors
+// CategorizedNodes interface moved to ast-node-visitors

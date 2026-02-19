@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { callGraphToDependencyMap } from "./ast-graph-builder";
 import { getPosition, getPositionFromOffset, isFunctionLike } from "./ast-utils";
 import { getEnabled } from "./registry";
 import type { RuleContext, Violation } from "./rule-context";
@@ -162,6 +163,8 @@ export function buildRuleContext(parsedFile: ParsedFile): RuleContext {
 		dependencyGraph,
 	};
 }
+// buildCallGraph: Local version kept to capture position information
+// Global version in ast-graph-builder uses placeholder positions
 function buildCallGraph(
 	functions: FunctionInfo[],
 	sourceFile: ts.SourceFile,
@@ -577,13 +580,7 @@ function findFunctionNode(
 function isStepdownViolation(v: Violation): v is StepdownViolation {
 	return "dependency" in v;
 }
-function callGraphToDependencyMap(callGraph: Map<string, CallSiteInfo[]>): Map<string, string[]> {
-	const map = new Map<string, string[]>();
-	for (const [caller, deps] of callGraph) {
-		map.set(caller, [...new Set(deps.map((d) => d.calledFunction))]);
-	}
-	return map;
-}
+// callGraphToDependencyMap: Now uses unified ast-graph-builder module
 function findViolationsForFunction(
 	func: FunctionInfo,
 	functions: FunctionInfo[],
