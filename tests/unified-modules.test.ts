@@ -159,8 +159,10 @@ function inner() {}`;
 	}
 	findCall(sourceFile);
 
-	expect(callNode).not.toBeNull();
-	const container = findContainingFunction(callNode!, sourceFile);
+	if (!callNode) {
+		throw new Error("Call node not found");
+	}
+	const container = findContainingFunction(callNode, sourceFile);
 	expect(container).toBe("outer");
 });
 
@@ -436,7 +438,8 @@ export { foo };`;
 	// First should be imports
 	expect(ts.isImportDeclaration(reconstructed[0])).toBe(true);
 	// Last should be exports
-	expect(ts.isExportDeclaration(reconstructed.at(-1)!)).toBe(true);
+	const lastNode = reconstructed.at(-1);
+	expect(lastNode && ts.isExportDeclaration(lastNode)).toBe(true);
 });
 
 test("visitAllNodes visits every node in tree", () => {
@@ -478,8 +481,11 @@ test("findFirstNode returns first matching node", () => {
 
 	const firstFunc = findFirstNode(sourceFile, ts.isFunctionDeclaration);
 
-	expect(firstFunc).not.toBeNull();
-	expect(ts.isFunctionDeclaration(firstFunc!)).toBe(true);
+	if (firstFunc && ts.isFunctionDeclaration(firstFunc)) {
+		expect(true).toBe(true); // Type-narrowed successfully
+	} else {
+		throw new Error("Expected function declaration");
+	}
 });
 
 test("findFirstNode returns null when no match found", () => {

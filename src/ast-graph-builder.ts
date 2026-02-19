@@ -31,25 +31,6 @@ export function extractFunctionNames(functions: FunctionInfo[]): Set<string> {
 }
 
 /**
- * Extract function name from a TypeScript node.
- * Handles FunctionDeclarations and VariableStatements with function initializers.
- */
-export function extractFunctionName(node: ts.Node, sourceFile: ts.SourceFile): string | null {
-	if (ts.isFunctionDeclaration(node) && node.name) {
-		return node.name.getText(sourceFile);
-	}
-
-	if (ts.isVariableStatement(node)) {
-		const [declaration] = node.declarationList.declarations;
-		if (declaration?.name && ts.isIdentifier(declaration.name)) {
-			return declaration.name.getText(sourceFile);
-		}
-	}
-
-	return null;
-}
-
-/**
  * Build a dependency graph from a list of function nodes.
  * Returns mapping of function names to their dependencies and node references.
  */
@@ -76,6 +57,25 @@ export function buildDependencyGraph(
 	}
 
 	return { functionNames, dependencies };
+}
+
+/**
+ * Extract function name from a TypeScript node.
+ * Handles FunctionDeclarations and VariableStatements with function initializers.
+ */
+export function extractFunctionName(node: ts.Node, sourceFile: ts.SourceFile): string | null {
+	if (ts.isFunctionDeclaration(node) && node.name) {
+		return node.name.getText(sourceFile);
+	}
+
+	if (ts.isVariableStatement(node)) {
+		const [declaration] = node.declarationList.declarations;
+		if (declaration?.name && ts.isIdentifier(declaration.name)) {
+			return declaration.name.getText(sourceFile);
+		}
+	}
+
+	return null;
 }
 
 interface DependencyExtractionContext {
