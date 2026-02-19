@@ -129,7 +129,9 @@ async function processAnalysisResult(
 		return createNoViolationsResult(result.file);
 	}
 
-	if (result.circularDependencies.length > 0) {
+	// Even if there are circular dependencies, we should still attempt to fix stepdown violations
+	// Only refuse to fix if there are circular deps AND no actionable violations
+	if (result.circularDependencies.length > 0 && result.violations.length === 0) {
 		return createCircularDependencyResult(result.file, result.circularDependencies.length);
 	}
 
@@ -160,9 +162,16 @@ async function fixFileWithErrorHandling(params: {
 	try {
 		return await fixFile(params);
 	} catch (error) {
-		return createUnfixedResult(params.filePath, [
-			error instanceof Error ? error.message : String(error),
-		]);
+		// If the error is due to circular dependencies detected during topological sort,
+		// it means we can't reorder due to cycles, so return a result indicating that
+		const errorMessage = error instanceof Error ? error.message : String(error);
+		if (errorMessage.includes("Circular dependency detected")) {
+			return createCircularDependencyResult(
+				params.filePath,
+				params.analysisResult.circularDependencies.length,
+			);
+		}
+		return createUnfixedResult(params.filePath, [errorMessage]);
 	}
 }
 

@@ -146,10 +146,16 @@ function outputFixResults(results: FixResult[], json: boolean): void {
 		return;
 	}
 	const changedFiles = results.filter((result) => result.fixed);
+	const failedFiles = results.filter((result) => !result.fixed && result.errors.length > 0);
+
 	for (const result of changedFiles) {
 		console.log(formatFixResult(result));
 	}
-	if (changedFiles.length === 0) {
+	for (const result of failedFiles) {
+		console.log(formatFixResult(result));
+	}
+
+	if (changedFiles.length === 0 && failedFiles.length === 0) {
 		console.log(picocolors.green("✓ No files needed fixing"));
 	}
 }
