@@ -17,6 +17,7 @@
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Tests, linters, builds
 3. **Update issue status** - Close finished work, update in-progress items
+4. **Document changes** - Update README, CHANGELOG, changesets, etc.
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
