@@ -125,14 +125,8 @@ async function processAnalysisResult(
 	config: Config,
 	service: FileService,
 ): Promise<FixResult> {
-	if (result.violations.length === 0 && result.circularDependencies.length === 0) {
+	if (result.violations.length === 0) {
 		return createNoViolationsResult(result.file);
-	}
-
-	// Even if there are circular dependencies, we should still attempt to fix stepdown violations
-	// Only refuse to fix if there are circular deps AND no actionable violations
-	if (result.circularDependencies.length > 0 && result.violations.length === 0) {
-		return createCircularDependencyResult(result.file, result.circularDependencies.length);
 	}
 
 	return await fixFileWithErrorHandling({
@@ -147,12 +141,6 @@ function createNoViolationsResult(file: string): FixResult {
 	return createUnfixedResult(file, []);
 }
 
-function createCircularDependencyResult(file: string, count: number): FixResult {
-	return createUnfixedResult(file, [
-		`Cannot fix: ${count} circular dependencies detected. Refactoring required.`,
-	]);
-}
-
 async function fixFileWithErrorHandling(params: {
 	filePath: string;
 	config: Config;
@@ -162,15 +150,7 @@ async function fixFileWithErrorHandling(params: {
 	try {
 		return await fixFile(params);
 	} catch (error) {
-		// If the error is due to circular dependencies detected during topological sort,
-		// it means we can't reorder due to cycles, so return a result indicating that
 		const errorMessage = error instanceof Error ? error.message : String(error);
-		if (errorMessage.includes("Circular dependency detected")) {
-			return createCircularDependencyResult(
-				params.filePath,
-				params.analysisResult.circularDependencies.length,
-			);
-		}
 		return createUnfixedResult(params.filePath, [errorMessage]);
 	}
 }
@@ -560,14 +540,56 @@ function reorderFunctions(
 	sourceFile: ts.SourceFile,
 ): Array<{ node: ts.Node; info: null }> {
 	const sourceOrder = new Map<string, number>();
+	const nameToFunc = new Map<string, { node: ts.Node; info: null }>();
+
 	for (const [i, f] of functions.entries()) {
 		const name = extractFunctionName(f.node, sourceFile);
-		if (name) sourceOrder.set(name, i);
+		if (name) {
+			sourceOrder.set(name, i);
+			nameToFunc.set(name, f);
+		}
 	}
-	const sorted = topologicalSort(dependencies, sourceOrder).reverse();
-	return sorted
-		.map((name) => functions.find((f) => extractFunctionName(f.node, sourceFile) === name))
+
+	// Remove leaf functions (those with no outgoing edges) to break cycles
+	const leafNames = findAndRemoveLeafFunctions(dependencies, sourceOrder);
+	const leafFunctions = leafNames
+		.map((name) => nameToFunc.get(name))
 		.filter((f): f is { node: ts.Node; info: null } => f !== undefined);
+
+	const sorted = topologicalSort(dependencies, sourceOrder).reverse();
+	const sortedFunctions = sorted
+		.map((name) => nameToFunc.get(name))
+		.filter((f): f is { node: ts.Node; info: null } => f !== undefined);
+
+	// Append leaf functions in their original order
+	return [...sortedFunctions, ...leafFunctions];
+}
+
+function findAndRemoveLeafFunctions(
+	dependencies: Map<string, string[]>,
+	sourceOrder: Map<string, number>,
+): string[] {
+	// A leaf function is one with no outgoing edges (empty dependencies)
+	const leaves: string[] = [];
+
+	// Collect all leaf function names
+	const leafNames: string[] = [];
+	for (const [name, deps] of dependencies) {
+		if (deps.length === 0) {
+			leafNames.push(name);
+		}
+	}
+
+	// Remove them from the dependency map and collect for later
+	for (const name of leafNames) {
+		dependencies.delete(name);
+		leaves.push(name);
+	}
+
+	// Sort leaves by their original source order
+	leaves.sort((a, b) => (sourceOrder.get(a) ?? 999) - (sourceOrder.get(b) ?? 999));
+
+	return leaves;
 }
 
 function topologicalSort(
@@ -587,6 +609,10 @@ function topologicalSort(
 		}
 	}
 
+	// Add any functions that weren't visited (due to cycles) at the end in source order
+	const unvisited = names.filter((name) => !visited.has(name));
+	result.push(...unvisited);
+
 	return result;
 }
 
@@ -600,7 +626,9 @@ interface SortContext {
 
 function visitDependencyNode(name: string, context: SortContext): void {
 	if (context.temp.has(name)) {
-		throw new Error(`Circular dependency detected involving ${name}`);
+		// Cycle detected - silently skip to allow partial ordering
+		// Functions involved in cycles will be placed at the end in original order
+		return;
 	}
 	if (context.visited.has(name)) {
 		return;
@@ -612,7 +640,10 @@ function visitDependencyNode(name: string, context: SortContext): void {
 		(a, b) => (context.sourceOrder.get(a) ?? 999) - (context.sourceOrder.get(b) ?? 999),
 	);
 	for (const dep of orderedDeps) {
-		visitDependencyNode(dep, context);
+		// Only visit if the dependency is still in the graph (not a leaf we removed)
+		if (context.dependencies.has(dep)) {
+			visitDependencyNode(dep, context);
+		}
 	}
 	context.temp.delete(name);
 	context.visited.add(name);
