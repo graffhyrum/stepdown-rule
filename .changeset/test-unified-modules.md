@@ -1,5 +1,5 @@
 ---
-type: patch
+"@stepdown/analyzer": patch
 ---
 
 Add comprehensive test coverage for unified modules (ast-graph-builder, graph-algorithms, ast-node-visitors)

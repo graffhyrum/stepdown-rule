@@ -36,3 +36,4 @@ tests/*-temp
 
 # Finder (MacOS) folder config
 .DS_Store
+telemetry-id
