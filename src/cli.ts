@@ -19,13 +19,13 @@ program
 	.option("--output-file <file>", "Write JSON output to file")
 	.option("--ignore <patterns...>", "Additional ignore patterns")
 	.option("--config <file>", "Configuration file path", ".stepdownrc.json")
-	.option("--verbose", "Show circular dependencies in output", false)
+	.option("-v, --verbose", "Show circular dependencies in output", false)
 	.option("--rules <ids>", "Comma-separated rule ids to run (default: all)")
 	.action(async (patterns: string[], options) => {
 		const config = await createConfig(options);
 		try {
 			if (config.fix) {
-				await handleFix(patterns, config);
+				await handleFix(patterns, config, options.verbose);
 			} else {
 				await handleAnalyze(patterns, config, options.verbose);
 			}
@@ -99,7 +99,9 @@ function outputAnalysisResults(
 		totalNestedViolations === 0 &&
 		results.every((r) => r.circularDependencies.length === 0);
 	if (allClean) {
-		console.log(picocolors.green("✓ No stepdown violations found"));
+		if (verbose) {
+			console.log(picocolors.green("✓ No stepdown violations found"));
+		}
 	} else {
 		const violationCount = totalViolations + totalNestedViolations;
 		console.log(picocolors.yellow(`\nFound ${violationCount} violations in ${totalFiles} files`));
@@ -130,17 +132,17 @@ function formatAnalysisResult(result: AnalysisResult, verbose: boolean = false):
 	return lines.length > 0 ? lines.join("\n") : null;
 }
 
-async function handleFix(patterns: string[], config: Config): Promise<void> {
+async function handleFix(patterns: string[], config: Config, verbose: boolean): Promise<void> {
 	const fileService = new FileService({ ignore: config.ignore });
 	const fixResults = await fixFiles(getPatterns(patterns), config, fileService);
-	outputFixResults(fixResults, config.json);
+	outputFixResults(fixResults, config.json, verbose);
 }
 
 function getPatterns(patterns: string[]): string[] {
 	return patterns.length > 0 ? patterns : ["src/**/*.ts"];
 }
 
-function outputFixResults(results: FixResult[], json: boolean): void {
+function outputFixResults(results: FixResult[], json: boolean, verbose: boolean = false): void {
 	if (json) {
 		console.log(JSON.stringify(results, null, 2));
 		return;
@@ -155,7 +157,7 @@ function outputFixResults(results: FixResult[], json: boolean): void {
 		console.log(formatFixResult(result));
 	}
 
-	if (changedFiles.length === 0 && failedFiles.length === 0) {
+	if (changedFiles.length === 0 && failedFiles.length === 0 && verbose) {
 		console.log(picocolors.green("✓ No files needed fixing"));
 	}
 }
