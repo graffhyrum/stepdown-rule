@@ -38,7 +38,7 @@
 		"typecheck": "tsc --noEmit",
 		"check": "biome check .",
 		"fix": "biome check --write .",
-		"custom-hooks": "bun run scripts/rule-validator.ts && bun run dist/cli.js",
+		"custom-hooks": "bun run scripts/rule-validator.ts && bun run dist/cli.js analyze",
 		"fastvet": "bun run build && bun typecheck && bun fix && bun run custom-hooks  && bun run test:coverage",
 		"vet": "bun fastvet"
 	},
@@ -57,5 +57,8 @@
 	},
 	"engines": {
 		"node": ">=18.0.0"
+	},
+	"peerDependencies": {
+		"@typescript/native-preview": "^7.0.0-dev.20260219.1"
 	}
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import "./register-default-rules";
-import { Command } from "commander";
+import { Argument, Command, Option } from "commander";
 import picocolors from "picocolors";
 import { analyzeFiles } from "./analyzer";
 import { loadConfig } from "./config/loader";
@@ -8,37 +8,90 @@ import { fixFiles } from "./fixer";
 import { FileService } from "./services/FileService";
 import type { AnalysisResult, Config, FixResult } from "./types";
 
+const ignoreOption = new Option(
+	"--ignore <patterns...>",
+	"Additional glob patterns to ignore",
+).default([]);
+
+const configOption = new Option("--config <file>", "Configuration file path").default(
+	".stepdownrc.json",
+);
+
+const jsonOption = new Option("--json", "Output results in JSON format").default(false);
+
+const outputFileOption = new Option("--output-file <file>", "Write JSON output to file");
+
+const verboseOption = new Option("-v, --verbose", "Show circular dependencies in output").default(
+	false,
+);
+
+const rulesOption = new Option("--rules <ids>", "Comma-separated rule ids to run (default: all)");
+
+const patternsArgument = new Argument(
+	"[patterns...]",
+	'File patterns to analyze (default: "src/**/*.ts")',
+).default(["src/**/*.ts"]);
+
 const program = new Command();
 program
 	.name("stepdown-rule")
 	.description("TypeScript AST analyzer that enforces the stepdown rule for function organization")
-	.version("0.1.0")
-	.argument("[patterns...]", 'File patterns to analyze (default: "src/**/*.ts")')
-	.option("--fix", "Automatically fix violations by reordering functions", false)
-	.option("--json", "Output results in JSON format", false)
-	.option("--output-file <file>", "Write JSON output to file")
-	.option("--ignore <patterns...>", "Additional ignore patterns")
-	.option("--config <file>", "Configuration file path", ".stepdownrc.json")
-	.option("-v, --verbose", "Show circular dependencies in output", false)
-	.option("--rules <ids>", "Comma-separated rule ids to run (default: all)")
+	.version("0.1.0");
+
+const analyzeCommand = new Command();
+analyzeCommand
+	.name("analyze")
+	.description("Analyze files for stepdown rule violations")
+	.addArgument(patternsArgument)
+	.addOption(ignoreOption)
+	.addOption(configOption)
+	.addOption(jsonOption)
+	.addOption(outputFileOption)
+	.addOption(verboseOption)
+	.addOption(rulesOption)
 	.action(async (patterns: string[], options) => {
 		const config = await createConfig(options);
-		try {
-			if (config.fix) {
-				await handleFix(patterns, config, options.verbose);
-			} else {
-				await handleAnalyze(patterns, config, options.verbose);
-			}
-		} catch (error) {
-			console.error(picocolors.red("Error:"), getErrorMessage(error));
-			process.exit(1);
-		}
+		const fileService = new FileService({ ignore: config.ignore });
+		const results = await analyzeFiles(getPatterns(patterns), config, fileService);
+		outputAnalysisResults(results, config.json, options.verbose);
 	});
+
+const fixCommand = new Command();
+fixCommand
+	.name("fix")
+	.description("Automatically fix violations by reordering functions")
+	.addArgument(patternsArgument)
+	.addOption(ignoreOption)
+	.addOption(configOption)
+	.addOption(jsonOption)
+	.addOption(outputFileOption)
+	.addOption(verboseOption)
+	.addOption(rulesOption)
+	.action(async (patterns: string[], options) => {
+		const config = await createFixConfig(options);
+		const fileService = new FileService({ ignore: config.ignore });
+		const fixResults = await fixFiles(getPatterns(patterns), config, fileService);
+		outputFixResults(fixResults, config.json, options.verbose);
+	});
+
+program.addCommand(analyzeCommand);
+program.addCommand(fixCommand);
+
 program.parse();
+
+async function createFixConfig(options: {
+	ignore?: string[];
+	json?: boolean;
+	outputFile?: string;
+	config?: string;
+	rules?: string;
+}): Promise<Config> {
+	const config = await createConfig(options);
+	return { ...config, fix: true };
+}
 
 async function createConfig(options: {
 	ignore?: string[];
-	fix?: boolean;
 	json?: boolean;
 	outputFile?: string;
 	config?: string;
@@ -56,28 +109,18 @@ async function createConfig(options: {
 		analyzeArrowFunctions: fileConfig.analyzeArrowFunctions,
 		analyzeExportsOnly: fileConfig.analyzeExportsOnly,
 		reportCircularDependencies: fileConfig.reportCircularDependencies,
-		fix: options.fix ?? false,
+		fix: false,
 		json: options.json ?? false,
 		outputFile: options.outputFile,
 		enabledRuleIds,
 	};
 }
 
-function getErrorMessage(error: unknown): string {
-	return error instanceof Error ? error.message : String(error);
+function getPatterns(patterns: string[]): string[] {
+	return patterns.length > 0 ? patterns : ["src/**/*.ts"];
 }
 
-async function handleAnalyze(patterns: string[], config: Config, verbose: boolean): Promise<void> {
-	const fileService = new FileService({ ignore: config.ignore });
-	const results = await analyzeFiles(getPatterns(patterns), config, fileService);
-	outputAnalysisResults(results, config.json, verbose);
-}
-
-function outputAnalysisResults(
-	results: AnalysisResult[],
-	json: boolean,
-	verbose: boolean = false,
-): void {
+function outputAnalysisResults(results: AnalysisResult[], json: boolean, verbose = false): void {
 	if (json) {
 		console.log(JSON.stringify(results, null, 2));
 		return;
@@ -108,7 +151,7 @@ function outputAnalysisResults(
 	}
 }
 
-function formatAnalysisResult(result: AnalysisResult, verbose: boolean = false): string | null {
+function formatAnalysisResult(result: AnalysisResult, verbose = false): string | null {
 	if (
 		result.violations.length === 0 &&
 		result.nestedFunctionViolations.length === 0 &&
@@ -132,44 +175,6 @@ function formatAnalysisResult(result: AnalysisResult, verbose: boolean = false):
 	return lines.length > 0 ? lines.join("\n") : null;
 }
 
-async function handleFix(patterns: string[], config: Config, verbose: boolean): Promise<void> {
-	const fileService = new FileService({ ignore: config.ignore });
-	const fixResults = await fixFiles(getPatterns(patterns), config, fileService);
-	outputFixResults(fixResults, config.json, verbose);
-}
-
-function getPatterns(patterns: string[]): string[] {
-	return patterns.length > 0 ? patterns : ["src/**/*.ts"];
-}
-
-function outputFixResults(results: FixResult[], json: boolean, verbose: boolean = false): void {
-	if (json) {
-		console.log(JSON.stringify(results, null, 2));
-		return;
-	}
-	const changedFiles = results.filter((result) => result.fixed);
-	const failedFiles = results.filter((result) => !result.fixed && result.errors.length > 0);
-
-	for (const result of changedFiles) {
-		console.log(formatFixResult(result));
-	}
-	for (const result of failedFiles) {
-		console.log(formatFixResult(result));
-	}
-
-	if (changedFiles.length === 0 && failedFiles.length === 0 && verbose) {
-		console.log(picocolors.green("✓ No files needed fixing"));
-	}
-}
-
-function formatFixResult(result: FixResult): string {
-	if (result.fixed) {
-		return picocolors.green(`✓ Fixed: ${result.file} (reordered ${result.reordered} functions)`);
-	}
-	const errors = result.errors.map((error) => picocolors.red(`  ${error}`)).join("\n");
-	return picocolors.red(`✗ No changes: ${result.file}`) + (errors ? `\n${errors}` : "");
-}
-
 function formatNestedFunctionViolation(
 	file: string,
 	violation: AnalysisResult["nestedFunctionViolations"][number],
@@ -178,7 +183,6 @@ function formatNestedFunctionViolation(
 	const nestedCol = violation.nested.position.column;
 	const parentLine = violation.parent.position.line;
 	const parentCol = violation.parent.position.column;
-
 	const header = picocolors.red(`${file}:${nestedLine}:${nestedCol} - ${violation.message}`);
 	const detail = picocolors.gray(`  parent function: ${file}:${parentLine}:${parentCol}`);
 	return `${header}\n${detail}`;
@@ -195,9 +199,34 @@ function formatViolation(file: string, violation: AnalysisResult["violations"][n
 	const callCol = violation.callSite.column;
 	const depLine = violation.dependency.position.line;
 	const depCol = violation.dependency.position.column;
-
 	const header = picocolors.red(`${file}:${funcLine}:${funcCol} - ${violation.message}`);
 	const callSiteLink = picocolors.gray(`  call site: ${file}:${callLine}:${callCol}`);
 	const depLink = picocolors.gray(`  dependency declared at: ${file}:${depLine}:${depCol}`);
 	return `${header}\n${callSiteLink}\n${depLink}`;
+}
+
+function outputFixResults(results: FixResult[], json: boolean, verbose = false): void {
+	if (json) {
+		console.log(JSON.stringify(results, null, 2));
+		return;
+	}
+	const changedFiles = results.filter((result) => result.fixed);
+	const failedFiles = results.filter((result) => !result.fixed && result.errors.length > 0);
+	for (const result of changedFiles) {
+		console.log(formatFixResult(result));
+	}
+	for (const result of failedFiles) {
+		console.log(formatFixResult(result));
+	}
+	if (changedFiles.length === 0 && failedFiles.length === 0 && verbose) {
+		console.log(picocolors.green("✓ No files needed fixing"));
+	}
+}
+
+function formatFixResult(result: FixResult): string {
+	if (result.fixed) {
+		return picocolors.green(`✓ Fixed: ${result.file} (reordered ${result.reordered} functions)`);
+	}
+	const errors = result.errors.map((error) => picocolors.red(`  ${error}`)).join("\n");
+	return picocolors.red(`✗ No changes: ${result.file}`) + (errors ? `\n${errors}` : "");
 }
