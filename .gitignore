@@ -37,3 +37,6 @@ tests/*-temp
 # Finder (MacOS) folder config
 .DS_Store
 telemetry-id
+
+# bv (beads viewer) local config and caches
+.bv/
