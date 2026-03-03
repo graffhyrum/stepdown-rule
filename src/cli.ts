@@ -10,23 +10,27 @@ import type { AnalysisResult, Config, FixResult } from "./types";
 
 const ignoreOption = new Option(
 	"--ignore <patterns...>",
-	"Additional glob patterns to ignore",
+	"Glob patterns to exclude from analysis (e.g. 'dist/**' '**/*.test.ts')",
 ).default([]);
 
-const configOption = new Option("--config <file>", "Configuration file path").default(
-	".stepdownrc.json",
-);
+const configOption = new Option(
+	"--config <file>",
+	"Path to a .stepdownrc.json config file; CLI flags override file values",
+).default(".stepdownrc.json");
 
-const jsonOption = new Option("--json", "Output results in JSON format").default(false);
+const jsonOption = new Option(
+	"--json",
+	"Emit machine-readable JSON instead of human-readable text; useful for editor integrations",
+).default(false);
 
 const verboseOption = new Option(
 	"-v, --verbose",
-	"Show additional details (circular dependencies)",
+	"Include circular-dependency warnings in output (implied by --json)",
 ).default(false);
 
 const rulesOption = new Option(
 	"--rules <ids>",
-	"Comma-separated rule IDs (available: stepdown, nested; default: all)",
+	"Comma-separated subset of rules to run: 'stepdown' (caller-before-callee at module scope), 'nested' (logic-before-nested-functions inside a body); omit to run all",
 );
 
 const patternsArgument = new Argument(
@@ -43,7 +47,9 @@ program
 const analyzeCommand = new Command();
 analyzeCommand
 	.name("analyze")
-	.description("Analyze files for stepdown rule violations")
+	.description(
+		"Analyze files for stepdown rule violations; exits with code 1 when violations are found (default command)",
+	)
 	.addArgument(patternsArgument)
 	.addOption(ignoreOption)
 	.addOption(configOption)
@@ -65,7 +71,9 @@ analyzeCommand
 const fixCommand = new Command();
 fixCommand
 	.name("fix")
-	.description("Automatically fix violations by reordering functions")
+	.description(
+		"Reorder functions in-place to satisfy stepdown/nested rules; rewrites only files that have violations",
+	)
 	.addArgument(patternsArgument)
 	.addOption(ignoreOption)
 	.addOption(configOption)
