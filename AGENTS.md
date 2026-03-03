@@ -1,9 +1,1 @@
-- Each analysis (violation type) must have a fix implementation. Add fixture in `src/violation-coverage.ts` and ensure fix reduces violations.
-- Use bun instead of node.
-    - `npm run` > `bun run`
-    - `npx` > `bunx`
-- No Barrel Files. Import directly from source files.
-    - ❌ DON'T: `import { foo } from "./index"` or `import { foo } from "./folder"`
-    - ✅ DO: `import { foo } from "./folder/foo"`
-- Use Mermaid for diagrams.
-- do not fix unusued functions or parameters with underscores, delete them.
+CLAUDE.md
