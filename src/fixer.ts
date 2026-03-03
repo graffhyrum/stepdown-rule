@@ -391,7 +391,7 @@ function reorderBlockStatements(block: ts.Block, sourceFile: ts.SourceFile): ts.
 		.filter((s): s is ts.Statement => s !== undefined);
 
 	const otherStatements = block.statements.filter((s) => !funcStatements.some((f) => f.stmt === s));
-	const newStatements = [...reorderedStmts, ...otherStatements];
+	const newStatements = [...otherStatements, ...reorderedStmts];
 	if (
 		JSON.stringify(newStatements.map((s) => s.getText(sourceFile))) !==
 		JSON.stringify(block.statements.map((s) => s.getText(sourceFile)))
