@@ -1,4 +1,4 @@
-import { lstatSync } from "node:fs";
+import { lstat } from "node:fs/promises";
 import { glob } from "glob";
 import ts from "typescript";
 import type { FileServiceOptions, IFileService, ParsedFile } from "./types";
@@ -11,15 +11,10 @@ export class FileService implements IFileService {
 	}
 
 	async resolveFiles(patterns: string[]): Promise<string[]> {
-		const allFiles: string[] = [];
-		const expandedPatterns = patterns.map(normalizePattern);
-		for (const pattern of expandedPatterns) {
-			const matches = await glob(pattern, {
-				ignore: ["node_modules/**", "dist/**", "coverage/**", "*.d.ts", ...this.ignore],
-			});
-			allFiles.push(...matches);
-		}
-		return [...new Set(allFiles)].sort((a, b) => a.localeCompare(b));
+		const expandedPatterns = await Promise.all(patterns.map(normalizePattern));
+		const ignore = ["node_modules/**", "dist/**", "coverage/**", "*.d.ts", ...this.ignore];
+		const results = await Promise.all(expandedPatterns.map((pattern) => glob(pattern, { ignore })));
+		return [...new Set(results.flat())].sort((a, b) => a.localeCompare(b));
 	}
 
 	async parseFile(filePath: string): Promise<ParsedFile> {
@@ -41,9 +36,10 @@ export class FileService implements IFileService {
 	}
 }
 
-function normalizePattern(pattern: string): string {
+async function normalizePattern(pattern: string): Promise<string> {
 	try {
-		if (lstatSync(pattern).isDirectory()) {
+		const stat = await lstat(pattern);
+		if (stat.isDirectory()) {
 			const sep = pattern.endsWith("/") ? "" : "/";
 			return `${pattern}${sep}**/*.ts`;
 		}

@@ -52,13 +52,8 @@ analyzeCommand
 	.action(async (patterns: string[], options) => {
 		const config = await createConfig(options);
 		const fileService = new FileService({ ignore: config.ignore });
-		const resolvedPatterns = getPatterns(patterns);
-		const files = await fileService.resolveFiles(resolvedPatterns);
-		if (files.length === 0) {
-			console.log(picocolors.yellow(`No files matched: ${resolvedPatterns.join(", ")}`));
-			return;
-		}
-		const results = await analyzeFiles(resolvedPatterns, config, fileService);
+		if (await hasNoFiles(fileService, patterns)) return;
+		const results = await analyzeFiles(patterns, config, fileService);
 		outputAnalysisResults(results, config.json, options.verbose);
 		const counts = countAnalysisResults(results);
 		if (counts.violationCount > 0) {
@@ -74,18 +69,12 @@ fixCommand
 	.addOption(ignoreOption)
 	.addOption(configOption)
 	.addOption(jsonOption)
-	.addOption(verboseOption)
 	.addOption(rulesOption)
 	.action(async (patterns: string[], options) => {
 		const config = await createFixConfig(options);
 		const fileService = new FileService({ ignore: config.ignore });
-		const resolvedPatterns = getPatterns(patterns);
-		const files = await fileService.resolveFiles(resolvedPatterns);
-		if (files.length === 0) {
-			console.log(picocolors.yellow(`No files matched: ${resolvedPatterns.join(", ")}`));
-			return;
-		}
-		const fixResults = await fixFiles(resolvedPatterns, config, fileService);
+		if (await hasNoFiles(fileService, patterns)) return;
+		const fixResults = await fixFiles(patterns, config, fileService);
 		outputFixResults(fixResults, config.json);
 	});
 
@@ -125,8 +114,13 @@ async function createConfig(options: {
 	};
 }
 
-function getPatterns(patterns: string[]): string[] {
-	return patterns.length > 0 ? patterns : ["src/**/*.ts"];
+async function hasNoFiles(fileService: FileService, patterns: string[]): Promise<boolean> {
+	const files = await fileService.resolveFiles(patterns);
+	if (files.length === 0) {
+		console.log(picocolors.yellow(`No files matched: ${patterns.join(", ")}`));
+		return true;
+	}
+	return false;
 }
 
 function outputAnalysisResults(results: AnalysisResult[], json: boolean, verbose = false): void {
