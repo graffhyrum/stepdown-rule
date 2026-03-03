@@ -195,6 +195,7 @@ function buildCallGraph(
 }
 function extractFunctions(sourceFile: ts.SourceFile): FunctionInfo[] {
 	const functions: FunctionInfo[] = [];
+	const fileLevelIdentifiers = collectFileLevelIdentifiers(sourceFile);
 	visit(sourceFile, null);
 	return functions;
 	function visit(node: ts.Node, parentFunction: string | null) {
@@ -207,7 +208,7 @@ function extractFunctions(sourceFile: ts.SourceFile): FunctionInfo[] {
 		}
 		if (ts.isVariableStatement(node)) {
 			// Check if this variable statement contains a function
-			const context: VariableStatementContext = { sourceFile, functions, parentFunction };
+			const context: VariableStatementContext = { sourceFile, functions, parentFunction, fileLevelIdentifiers };
 			const funcName = handleVariableStatement(node, context);
 			if (funcName) {
 				// Continue traversing with this function as the parent
@@ -296,7 +297,7 @@ function createVariableFunctionInfo(
 		canBeFunctionDeclaration: isFunctionLike(declaration.initializer)
 			? canConvertToFunctionDeclaration(
 					declaration.initializer as ts.FunctionLikeDeclaration,
-					context.sourceFile,
+					context.fileLevelIdentifiers,
 				)
 			: false,
 		parentFunction: context.parentFunction,
@@ -304,18 +305,17 @@ function createVariableFunctionInfo(
 }
 function canConvertToFunctionDeclaration(
 	node: ts.FunctionLikeDeclaration,
-	sourceFile: ts.SourceFile,
+	fileLevelIdentifiers: Set<string>,
 ): boolean {
 	if (!hasNoThisKeyword(node)) return false;
-	const safeIdentifiers = buildSafeIdentifiers(node, sourceFile);
-	return hasNoExternalVariableReferences({ node, sourceFile, safeIdentifiers });
+	const safeIdentifiers = buildSafeIdentifiers(node, fileLevelIdentifiers);
+	return hasNoExternalVariableReferences({ node, safeIdentifiers });
 }
 function buildSafeIdentifiers(
 	fn: ts.FunctionLikeDeclaration,
-	sourceFile: ts.SourceFile,
+	fileLevelIdentifiers: Set<string>,
 ): Set<string> {
-	const names = collectSourceFileFunctionNames(sourceFile);
-	for (const id of collectImportIdentifiers(sourceFile)) names.add(id);
+	const names = new Set(fileLevelIdentifiers);
 	for (const id of collectParameterNames(fn)) names.add(id);
 	return names;
 }
@@ -330,6 +330,11 @@ function hasNoThisKeyword(node: ts.Node): boolean {
 	}
 	return true;
 }
+function collectFileLevelIdentifiers(sourceFile: ts.SourceFile): Set<string> {
+	const names = collectSourceFileFunctionNames(sourceFile);
+	for (const id of collectImportIdentifiers(sourceFile)) names.add(id);
+	return names;
+}
 function collectSourceFileFunctionNames(sourceFile: ts.SourceFile): Set<string> {
 	const functionNames = new Set<string>();
 	visit(sourceFile);
@@ -343,23 +348,21 @@ function collectSourceFileFunctionNames(sourceFile: ts.SourceFile): Set<string> 
 }
 function hasNoExternalVariableReferences({
 	node,
-	sourceFile,
 	safeIdentifiers,
 }: {
 	node: ts.Node;
-	sourceFile: ts.SourceFile;
 	safeIdentifiers: Set<string>;
 }): boolean {
 	if (
 		ts.isIdentifier(node) &&
-		!safeIdentifiers.has(node.getText(sourceFile)) &&
+		!safeIdentifiers.has(node.text) &&
 		!isNonValueIdentifierContext(node)
 	)
 		return false;
 	return node
 		.getChildren()
 		.every((child) =>
-			hasNoExternalVariableReferences({ node: child, sourceFile, safeIdentifiers }),
+			hasNoExternalVariableReferences({ node: child, safeIdentifiers }),
 		);
 }
 function isNonValueIdentifierContext(node: ts.Identifier): boolean {
@@ -789,4 +792,5 @@ interface VariableStatementContext {
 	sourceFile: ts.SourceFile;
 	functions: FunctionInfo[];
 	parentFunction: string | null;
+	fileLevelIdentifiers: Set<string>;
 }

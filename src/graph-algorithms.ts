@@ -136,17 +136,17 @@ export function detectCircularDependencies(
 /**
  * DFS for cycle detection.
  */
-function dfsDetectCycle(funcName: string, context: CircularDepsContext): boolean {
+function dfsDetectCycle(funcName: string, context: CircularDepsContext): void {
 	if (context.recursionStack.has(funcName)) {
 		const cycle = extractCycle(funcName, context);
 		if (isValidCycle(cycle)) {
 			context.cycles.push(cycle);
 		}
-		return true;
+		return;
 	}
 
 	if (context.visited.has(funcName)) {
-		return false;
+		return;
 	}
 
 	context.visited.add(funcName);
@@ -155,14 +155,11 @@ function dfsDetectCycle(funcName: string, context: CircularDepsContext): boolean
 
 	const callSites = context.callGraph.get(funcName) || [];
 	for (const { calledFunction } of callSites) {
-		if (dfsDetectCycle(calledFunction, context)) {
-			return true;
-		}
+		dfsDetectCycle(calledFunction, context);
 	}
 
 	context.recursionStack.delete(funcName);
 	context.path.pop();
-	return false;
 }
 
 /**
