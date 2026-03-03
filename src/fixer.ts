@@ -397,9 +397,6 @@ function extractStatementFunctionName(
 	}
 	return null;
 }
-// CATEGORIZATION: Now uses unified ast-node-visitors module
-// NODE CLASSIFICATION: Moved to ast-node-visitors
-// DEPENDENCY GRAPH: Now uses unified ast-graph-builder module
 // TOPOLOGICAL ORDERING: sort functions by dependencies
 function reorderFunctions(
 	functions: Array<{

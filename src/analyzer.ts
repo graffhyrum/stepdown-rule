@@ -67,7 +67,7 @@ function findNestedFunctionViolations(
 	const violations: NestedFunctionViolation[] = [];
 	const functionMap = new Map(functions.map((f) => [f.name, f]));
 	const context = { sourceFile, functionMap, violations };
-	visit(sourceFile, context);
+	visitForNestedViolations(sourceFile, context);
 	return violations;
 }
 function findViolations(
@@ -135,7 +135,7 @@ function buildCallGraph(
 	functions: FunctionInfo[],
 	sourceFile: ts.SourceFile,
 ): Map<string, CallSiteInfo[]> {
-	function visit(node: ts.Node) {
+	function visitForCallGraph(node: ts.Node) {
 		if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
 			const calledFunction = node.expression.getText(sourceFile);
 			if (functionNames.has(calledFunction)) {
@@ -146,7 +146,7 @@ function buildCallGraph(
 				}
 			}
 		}
-		ts.forEachChild(node, visit);
+		ts.forEachChild(node, visitForCallGraph);
 	}
 	function recordDependency(calledFunction: string, container: string, callSite: CallSite) {
 		const deps = callGraph.get(container);
@@ -159,18 +159,18 @@ function buildCallGraph(
 	for (const func of functions) {
 		callGraph.set(func.name, []);
 	}
-	visit(sourceFile);
+	visitForCallGraph(sourceFile);
 	return callGraph;
 }
 function extractFunctions(sourceFile: ts.SourceFile): FunctionInfo[] {
 	const functions: FunctionInfo[] = [];
-	visit(sourceFile, null);
+	visitForFunctionExtraction(sourceFile, null);
 	return functions;
-	function visit(node: ts.Node, parentFunction: string | null) {
+	function visitForFunctionExtraction(node: ts.Node, parentFunction: string | null) {
 		if (ts.isFunctionDeclaration(node) && node.name) {
 			const funcName = node.name.getText(sourceFile);
 			handleFunctionDeclaration({ name: node.name, node, sourceFile, functions, parentFunction });
-			ts.forEachChild(node, (child) => visit(child, funcName));
+			ts.forEachChild(node, (child) => visitForFunctionExtraction(child, funcName));
 			return;
 		}
 		if (ts.isVariableStatement(node)) {
@@ -182,14 +182,14 @@ function extractFunctions(sourceFile: ts.SourceFile): FunctionInfo[] {
 			const funcName = handleVariableStatement(node, context);
 			if (funcName) {
 				// Continue traversing with this function as the parent
-				ts.forEachChild(node, (child) => visit(child, funcName));
+				ts.forEachChild(node, (child) => visitForFunctionExtraction(child, funcName));
 				return;
 			}
 		}
-		ts.forEachChild(node, (child) => visit(child, parentFunction));
+		ts.forEachChild(node, (child) => visitForFunctionExtraction(child, parentFunction));
 	}
 }
-function visit(node: ts.Node, context: NestedViolationContext): void {
+function visitForNestedViolations(node: ts.Node, context: NestedViolationContext): void {
 	const { sourceFile, functionMap } = context;
 	if (ts.isFunctionDeclaration(node) && node.name) {
 		const funcInfo = functionMap.get(node.name.getText(sourceFile));
@@ -199,7 +199,7 @@ function visit(node: ts.Node, context: NestedViolationContext): void {
 	} else if (ts.isVariableStatement(node)) {
 		processVariableStatement(node, context);
 	}
-	ts.forEachChild(node, (child) => visit(child, context));
+	ts.forEachChild(node, (child) => visitForNestedViolations(child, context));
 }
 function findContainingFunction(node: ts.Node, sourceFile: ts.SourceFile): string | null {
 	let current: ts.Node | undefined = node.parent;
@@ -462,14 +462,14 @@ function findFunctionNode(
 	funcInfo: FunctionInfo,
 	sourceFile: ts.SourceFile,
 ): ts.FunctionLikeDeclaration | null {
-	function visit(node: ts.Node): ts.FunctionLikeDeclaration | null {
+	function visitForFunctionNode(node: ts.Node): ts.FunctionLikeDeclaration | null {
 		const match = matchFunctionNode(node, funcInfo.position.start);
 		if (match) {
 			return match;
 		}
-		return ts.forEachChild(node, visit) || null;
+		return ts.forEachChild(node, visitForFunctionNode) || null;
 	}
-	return visit(sourceFile);
+	return visitForFunctionNode(sourceFile);
 }
 function matchFunctionNode(node: ts.Node, targetStart: number): ts.FunctionLikeDeclaration | null {
 	if (
@@ -489,7 +489,6 @@ function matchFunctionNode(node: ts.Node, targetStart: number): ts.FunctionLikeD
 function isStepdownViolation(v: Violation): v is StepdownViolation {
 	return "dependency" in v;
 }
-// callGraphToDependencyMap: Now uses unified ast-graph-builder module
 function findViolationsForFunction(
 	func: FunctionInfo,
 	functions: FunctionInfo[],
