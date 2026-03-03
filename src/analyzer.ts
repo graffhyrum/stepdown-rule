@@ -472,6 +472,12 @@ function findFunctionNode(
 		) {
 			return node as ts.FunctionLikeDeclaration;
 		}
+		if (ts.isVariableStatement(node) && node.getStart() === funcInfo.position.start) {
+			const init = node.declarationList.declarations[0]?.initializer;
+			if (init && isFunctionLike(init)) {
+				return init as ts.FunctionLikeDeclaration;
+			}
+		}
 		return ts.forEachChild(node, visit) || null;
 	}
 	return visit(sourceFile);

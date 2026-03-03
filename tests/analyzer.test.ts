@@ -125,3 +125,12 @@ test("handles files with only comments", () => {
 	const result = analyzeCode("// comment\n/* block */");
 	expect(result.totalFunctions).toBe(0);
 });
+
+test("arrow parent with referenced nested function has no false-positive nested violation", () => {
+	const result = analyzeCode(`const parent = () => {
+  const x = helper();
+  return x;
+  function helper() { return 42; }
+};`);
+	expect(result.nestedFunctionViolations).toHaveLength(0);
+});
