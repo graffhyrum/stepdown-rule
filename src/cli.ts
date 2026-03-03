@@ -189,7 +189,7 @@ function formatNestedFunctionViolation(
 }
 
 function formatCircularDependency(file: string, cycle: string[]): string {
-	return picocolors.red(`${file} - Circular dependency: ${cycle.join(" → ")} → ${cycle[0]}`);
+	return picocolors.red(`${file} - Circular dependency: ${cycle.join(" → ")}`);
 }
 
 function formatViolation(file: string, violation: AnalysisResult["violations"][number]): string {
