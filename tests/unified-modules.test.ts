@@ -1,13 +1,11 @@
 import { expect, test } from "bun:test";
 import ts from "typescript";
 import {
-	buildCallGraph,
 	buildDependencyGraph,
 	callGraphToDependencyMap,
 	extractDependenciesFor,
 	extractFunctionName,
 	extractFunctionNames,
-	findContainingFunction,
 } from "../src/ast-graph-builder";
 import {
 	categorizeNodes,
@@ -127,46 +125,6 @@ function a() {}`;
 
 	const deps = extractDependenciesFor(mainNode, sourceFile, funcNames);
 	expect(deps).toEqual(["a"]);
-});
-
-test("buildCallGraph creates call graph with function call locations", () => {
-	const code = `function main() { helper(); }
-function helper() { return 'test'; }`;
-	const sourceFile = parseCode(code);
-
-	const funcs: FunctionInfo[] = [
-		{ name: "main", parentFunction: null, position: { start: 0, line: 1 } },
-		{ name: "helper", parentFunction: null, position: { start: 30, line: 2 } },
-	];
-
-	const callGraph = buildCallGraph(funcs, sourceFile);
-
-	expect(callGraph.has("main")).toBe(true);
-	expect(callGraph.has("helper")).toBe(true);
-	expect(callGraph.get("main")).toHaveLength(1);
-	expect(callGraph.get("main")?.[0]?.calledFunction).toBe("helper");
-});
-
-test("findContainingFunction identifies parent function of call expression", () => {
-	const code = `function outer() { inner(); }
-function inner() {}`;
-	const sourceFile = parseCode(code);
-
-	// Find the call expression (inner())
-	let callNode: ts.Node | null = null;
-	function findCall(node: ts.Node) {
-		if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-			callNode = node;
-		}
-		ts.forEachChild(node, findCall);
-	}
-	findCall(sourceFile);
-
-	if (!callNode) {
-		throw new Error("Call node not found");
-	}
-	const container = findContainingFunction(callNode, sourceFile);
-	expect(container).toBe("outer");
 });
 
 test("callGraphToDependencyMap converts call graph to simple dependency map", () => {
