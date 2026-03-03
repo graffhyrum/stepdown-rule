@@ -17,6 +17,14 @@ This file provides guidance to Claude Code and agents working on this repository
     - ✅ DO: `import { foo } from "./folder/foo"`
 - Use Mermaid for diagrams.
 - Do not fix unused functions or parameters with underscores — delete them.
+- Commit pre-existing uncommitted changes before starting new work to avoid push-hook conflicts.
+
+## Subagent Scope Boundaries
+
+When dispatching subagents for bugfixes or targeted changes, include explicit scope constraints:
+- **List exact functions** that may be modified (e.g., "Only modify `dfsDetectCycle` in `src/analyzer.ts`")
+- **Prohibit scope expansion**: "DO NOT modify any other functions. DO NOT add or remove imports."
+- **Cherry-pick over merge**: Review worktree diffs before applying; apply only in-scope changes manually
 
 ## Commands
 

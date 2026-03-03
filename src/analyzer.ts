@@ -208,7 +208,12 @@ function extractFunctions(sourceFile: ts.SourceFile): FunctionInfo[] {
 		}
 		if (ts.isVariableStatement(node)) {
 			// Check if this variable statement contains a function
-			const context: VariableStatementContext = { sourceFile, functions, parentFunction, fileLevelIdentifiers };
+			const context: VariableStatementContext = {
+				sourceFile,
+				functions,
+				parentFunction,
+				fileLevelIdentifiers,
+			};
 			const funcName = handleVariableStatement(node, context);
 			if (funcName) {
 				// Continue traversing with this function as the parent
@@ -361,9 +366,7 @@ function hasNoExternalVariableReferences({
 		return false;
 	return node
 		.getChildren()
-		.every((child) =>
-			hasNoExternalVariableReferences({ node: child, safeIdentifiers }),
-		);
+		.every((child) => hasNoExternalVariableReferences({ node: child, safeIdentifiers }));
 }
 function isNonValueIdentifierContext(node: ts.Identifier): boolean {
 	const { parent } = node;
