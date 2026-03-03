@@ -125,30 +125,51 @@ function outputAnalysisResults(results: AnalysisResult[], json: boolean, verbose
 		console.log(JSON.stringify(results, null, 2));
 		return;
 	}
-	let totalViolations = 0;
-	let totalNestedViolations = 0;
-	let totalFiles = 0;
+	const counts = countAnalysisResults(results);
+	printFormattedResults(results, verbose);
+	printAnalysisSummary(counts, verbose);
+}
+
+function countAnalysisResults(results: AnalysisResult[]): {
+	violationCount: number;
+	totalFiles: number;
+	circularCount: number;
+} {
+	let violationCount = 0;
+	let circularCount = 0;
 	for (const result of results) {
-		totalFiles += 1;
-		totalViolations += result.violations.length;
-		totalNestedViolations += result.nestedFunctionViolations.length;
+		violationCount += result.violations.length + result.nestedFunctionViolations.length;
+		circularCount += result.circularDependencies.length;
+	}
+	return { violationCount, totalFiles: results.length, circularCount };
+}
+
+function printFormattedResults(results: AnalysisResult[], verbose: boolean): void {
+	for (const result of results) {
 		const formatted = formatAnalysisResult(result, verbose);
 		if (formatted) {
 			console.log(formatted);
 		}
 	}
-	const allClean =
-		totalViolations === 0 &&
-		totalNestedViolations === 0 &&
-		results.every((r) => r.circularDependencies.length === 0);
-	if (allClean) {
+}
+
+function printAnalysisSummary(
+	counts: ReturnType<typeof countAnalysisResults>,
+	verbose: boolean,
+): void {
+	const { violationCount, totalFiles, circularCount } = counts;
+	if (violationCount === 0 && circularCount === 0) {
 		if (verbose) {
 			console.log(picocolors.green("✓ No stepdown violations found"));
 		}
-	} else {
-		const violationCount = totalViolations + totalNestedViolations;
-		console.log(picocolors.yellow(`\nFound ${violationCount} violations in ${totalFiles} files`));
+		return;
 	}
+	const parts: string[] = [];
+	if (violationCount > 0)
+		parts.push(`${violationCount} violation${violationCount !== 1 ? "s" : ""}`);
+	if (circularCount > 0)
+		parts.push(`${circularCount} circular dependenc${circularCount !== 1 ? "ies" : "y"}`);
+	console.log(picocolors.yellow(`\nFound ${parts.join(" and ")} in ${totalFiles} files`));
 }
 
 function formatAnalysisResult(result: AnalysisResult, verbose = false): string | null {
