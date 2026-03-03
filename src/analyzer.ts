@@ -310,7 +310,10 @@ function canConvertToFunctionDeclaration(
 	const safeIdentifiers = buildSafeIdentifiers(node, sourceFile);
 	return hasNoExternalVariableReferences({ node, sourceFile, safeIdentifiers });
 }
-function buildSafeIdentifiers(fn: ts.FunctionLikeDeclaration, sourceFile: ts.SourceFile): Set<string> {
+function buildSafeIdentifiers(
+	fn: ts.FunctionLikeDeclaration,
+	sourceFile: ts.SourceFile,
+): Set<string> {
 	const names = collectSourceFileFunctionNames(sourceFile);
 	for (const id of collectImportIdentifiers(sourceFile)) names.add(id);
 	for (const id of collectParameterNames(fn)) names.add(id);
@@ -347,14 +350,25 @@ function hasNoExternalVariableReferences({
 	sourceFile: ts.SourceFile;
 	safeIdentifiers: Set<string>;
 }): boolean {
-	if (ts.isIdentifier(node) && !safeIdentifiers.has(node.getText(sourceFile)) && !isNonValueIdentifierContext(node)) return false;
-	return node.getChildren().every((child) => hasNoExternalVariableReferences({ node: child, sourceFile, safeIdentifiers }));
+	if (
+		ts.isIdentifier(node) &&
+		!safeIdentifiers.has(node.getText(sourceFile)) &&
+		!isNonValueIdentifierContext(node)
+	)
+		return false;
+	return node
+		.getChildren()
+		.every((child) =>
+			hasNoExternalVariableReferences({ node: child, sourceFile, safeIdentifiers }),
+		);
 }
 function isNonValueIdentifierContext(node: ts.Identifier): boolean {
 	const { parent } = node;
 	if (!parent) return false;
-	const isAccessExpr = ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent);
-	const isTypeOrBindingKey = ts.isTypeNode(parent) || (ts.isBindingElement(parent) && parent.propertyName === node);
+	const isAccessExpr =
+		ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent);
+	const isTypeOrBindingKey =
+		ts.isTypeNode(parent) || (ts.isBindingElement(parent) && parent.propertyName === node);
 	return isAccessExpr || isTypeOrBindingKey;
 }
 function collectImportIdentifiers(sourceFile: ts.SourceFile): Set<string> {
@@ -368,7 +382,10 @@ function collectImportIdentifiers(sourceFile: ts.SourceFile): Set<string> {
 function collectImportClauseNames(clause: ts.ImportClause, names: Set<string>): void {
 	if (clause.name) names.add(clause.name.text);
 	if (!clause.namedBindings) return;
-	if (ts.isNamespaceImport(clause.namedBindings)) { names.add(clause.namedBindings.name.text); return; }
+	if (ts.isNamespaceImport(clause.namedBindings)) {
+		names.add(clause.namedBindings.name.text);
+		return;
+	}
 	for (const el of clause.namedBindings.elements) names.add(el.name.text);
 }
 function collectParameterNames(fn: ts.FunctionLikeDeclaration): Set<string> {
@@ -377,7 +394,10 @@ function collectParameterNames(fn: ts.FunctionLikeDeclaration): Set<string> {
 	return names;
 }
 function collectBindingNames(pattern: ts.BindingName, names: Set<string>): void {
-	if (ts.isIdentifier(pattern)) { names.add(pattern.text); return; }
+	if (ts.isIdentifier(pattern)) {
+		names.add(pattern.text);
+		return;
+	}
 	for (const el of pattern.elements) {
 		if (!ts.isOmittedExpression(el)) collectBindingNames(el.name, names);
 	}
