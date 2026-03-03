@@ -19,9 +19,10 @@ const configOption = new Option("--config <file>", "Configuration file path").de
 
 const jsonOption = new Option("--json", "Output results in JSON format").default(false);
 
-const verboseOption = new Option("-v, --verbose", "Show additional details (circular dependencies)").default(
-	false,
-);
+const verboseOption = new Option(
+	"-v, --verbose",
+	"Show additional details (circular dependencies)",
+).default(false);
 
 const rulesOption = new Option(
 	"--rules <ids>",
