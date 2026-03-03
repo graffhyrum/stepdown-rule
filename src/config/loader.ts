@@ -1,12 +1,9 @@
 import { type } from "arktype";
-import { ConfigSchema, FileConfigSchema } from "./schema";
+import { FileConfigSchema } from "./schema";
 
 export async function loadConfig(configPath?: string): Promise<typeof FileConfigSchema.infer> {
 	const defaultConfig = {
 		ignore: [],
-		analyzeArrowFunctions: true,
-		analyzeExportsOnly: false,
-		reportCircularDependencies: true,
 	};
 
 	if (!configPath) {
@@ -36,10 +33,3 @@ export async function loadConfig(configPath?: string): Promise<typeof FileConfig
 	}
 }
 
-export function getConfigJsonSchema(): object {
-	return FileConfigSchema.toJsonSchema();
-}
-
-export function getFullConfigJsonSchema(): object {
-	return ConfigSchema.toJsonSchema();
-}

@@ -19,8 +19,6 @@ const configOption = new Option("--config <file>", "Configuration file path").de
 
 const jsonOption = new Option("--json", "Output results in JSON format").default(false);
 
-const outputFileOption = new Option("--output-file <file>", "Write JSON output to file");
-
 const verboseOption = new Option("-v, --verbose", "Show circular dependencies in output").default(
 	false,
 );
@@ -46,7 +44,6 @@ analyzeCommand
 	.addOption(ignoreOption)
 	.addOption(configOption)
 	.addOption(jsonOption)
-	.addOption(outputFileOption)
 	.addOption(verboseOption)
 	.addOption(rulesOption)
 	.action(async (patterns: string[], options) => {
@@ -68,7 +65,6 @@ fixCommand
 	.addOption(ignoreOption)
 	.addOption(configOption)
 	.addOption(jsonOption)
-	.addOption(outputFileOption)
 	.addOption(verboseOption)
 	.addOption(rulesOption)
 	.action(async (patterns: string[], options) => {
@@ -86,7 +82,6 @@ program.parse();
 async function createFixConfig(options: {
 	ignore?: string[];
 	json?: boolean;
-	outputFile?: string;
 	config?: string;
 	rules?: string;
 }): Promise<Config> {
@@ -97,7 +92,6 @@ async function createFixConfig(options: {
 async function createConfig(options: {
 	ignore?: string[];
 	json?: boolean;
-	outputFile?: string;
 	config?: string;
 	rules?: string;
 }): Promise<Config> {
@@ -110,12 +104,8 @@ async function createConfig(options: {
 		: undefined;
 	return {
 		ignore: options.ignore ?? fileConfig.ignore,
-		analyzeArrowFunctions: fileConfig.analyzeArrowFunctions,
-		analyzeExportsOnly: fileConfig.analyzeExportsOnly,
-		reportCircularDependencies: fileConfig.reportCircularDependencies,
 		fix: false,
 		json: options.json ?? false,
-		outputFile: options.outputFile,
 		enabledRuleIds,
 	};
 }

@@ -8,9 +8,6 @@ import type { AnalysisResult, Config } from "../src/types";
 
 export const defaultConfig: Config = {
 	ignore: [],
-	analyzeArrowFunctions: true,
-	analyzeExportsOnly: false,
-	reportCircularDependencies: true,
 	fix: false,
 	json: false,
 };
