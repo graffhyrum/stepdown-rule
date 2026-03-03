@@ -124,10 +124,7 @@ test("77q: ff-elysia convergence when available", async () => {
 
 		for (let i = 0; i < 15; i++) {
 			const results = await analyzeFiles(patterns, fixConfig);
-			const count = results.reduce(
-				(sum, r) => sum + (r.violations?.length ?? 0) + (r.nestedFunctionViolations?.length ?? 0),
-				0,
-			);
+			const count = results.reduce((sum, r) => sum + totalViolations(r), 0);
 			expect(count).toBeLessThanOrEqual(prevViolations);
 			prevViolations = count;
 			if (count === 0) break;
@@ -152,10 +149,12 @@ test("96h/1e0/27g: bead fixtures converge", async () => {
 		"fixtures/test-factory-method-calls.ts",
 	];
 
-	for (const fixture of fixtures) {
-		const content = await Bun.file(fixture).text();
-		await withTempFile(content, async (file) => {
-			await runFixAnalyzeLoop(file, fixConfig, 5)();
-		});
-	}
+	await Promise.all(
+		fixtures.map(async (fixture) => {
+			const content = await Bun.file(fixture).text();
+			await withTempFile(content, async (file) => {
+				await runFixAnalyzeLoop(file, fixConfig, 5)();
+			});
+		}),
+	);
 });

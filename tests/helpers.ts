@@ -1,6 +1,9 @@
+import { expect } from "bun:test";
+import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
+import { analyzeParsedFile } from "../src/analyzer";
+import { FileService } from "../src/services/FileService";
 import type { AnalysisResult, Config } from "../src/types";
 
 export const defaultConfig: Config = {
@@ -53,14 +56,34 @@ export async function withTempFile(
 	}
 }
 
+export function analyzeCode(code: string): AnalysisResult {
+	const service = new FileService();
+	const parsedFile = service.parseContent(code, "test.ts");
+	return analyzeParsedFile(parsedFile);
+}
+
 export function totalViolations(result: AnalysisResult | undefined): number {
 	return (result?.violations.length ?? 0) + (result?.nestedFunctionViolations.length ?? 0);
 }
 
-export async function copyFixtureToTemp(
-	dirname: string,
-	fixtureName: string,
-): Promise<string> {
+export async function assertFixReducesViolations(
+	code: string,
+	config: Config,
+	label: string,
+): Promise<void> {
+	const { analyzeFiles } = await import("../src/analyzer");
+	const { fixFiles } = await import("../src/fixer");
+	await withTempFile(code, async (file) => {
+		const [before] = await analyzeFiles([file], config);
+		const violationsBefore = totalViolations(before);
+		expect(violationsBefore, `${label} fixture must produce violations`).toBeGreaterThan(0);
+		await fixFiles([file], { ...config, fix: true });
+		const [after] = await analyzeFiles([file], config);
+		expect(totalViolations(after)).toBeLessThan(violationsBefore);
+	});
+}
+
+export async function copyFixtureToTemp(dirname: string, fixtureName: string): Promise<string> {
 	const content = await Bun.file(`fixtures/${fixtureName}`).text();
 	const dir = createTempDir(dirname);
 	return createTestFile(dir, "test.ts", content);

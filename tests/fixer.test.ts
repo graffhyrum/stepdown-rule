@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
-import { analyzeFiles } from "../src/analyzer";
 import { fixFiles } from "../src/fixer";
-import { copyFixtureToTemp, defaultConfig, fixConfig, withTempFile } from "./helpers";
+import { analyzeCode, fixConfig, withTempFile } from "./helpers";
 
 // --- Core fix behavior ---
 
@@ -152,8 +151,9 @@ test("1e0: fixes factory with method calling helper", async () => {
 
 		expect(result?.fixed).toBe(true);
 		expect(result?.errors).toHaveLength(0);
-		const [analysis] = await analyzeFiles([file], defaultConfig);
-		expect(analysis?.violations.length).toBe(0);
+		const fixed = await Bun.file(file).text();
+		const analysis = analyzeCode(fixed);
+		expect(analysis.violations.length).toBe(0);
 	});
 });
 
@@ -163,8 +163,9 @@ test("27g: fixes arrow const chain", async () => {
 		const [result] = await fixFiles([file], fixConfig);
 
 		expect(result?.fixed).toBe(true);
-		const [analysis] = await analyzeFiles([file], defaultConfig);
-		expect(analysis?.violations.length).toBe(0);
+		const fixed = await Bun.file(file).text();
+		const analysis = analyzeCode(fixed);
+		expect(analysis.violations.length).toBe(0);
 	});
 });
 
