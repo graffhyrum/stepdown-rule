@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { Config } from "../src/types";
+import { randomUUID } from "node:crypto";
+import type { AnalysisResult, Config } from "../src/types";
 
 export const defaultConfig: Config = {
 	ignore: [],
@@ -36,4 +37,31 @@ export async function createTestFile(
 	const filePath = join(dir, filename);
 	await Bun.write(filePath, content);
 	return filePath;
+}
+
+export async function withTempFile(
+	code: string,
+	fn: (file: string) => Promise<void>,
+	dirname = `temp-${randomUUID().slice(0, 8)}`,
+): Promise<void> {
+	const dir = createTempDir(dirname);
+	try {
+		const file = await createTestFile(dir, "test.ts", code);
+		await fn(file);
+	} finally {
+		cleanupTempDir(dir);
+	}
+}
+
+export function totalViolations(result: AnalysisResult | undefined): number {
+	return (result?.violations.length ?? 0) + (result?.nestedFunctionViolations.length ?? 0);
+}
+
+export async function copyFixtureToTemp(
+	dirname: string,
+	fixtureName: string,
+): Promise<string> {
+	const content = await Bun.file(`fixtures/${fixtureName}`).text();
+	const dir = createTempDir(dirname);
+	return createTestFile(dir, "test.ts", content);
 }

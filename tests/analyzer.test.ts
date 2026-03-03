@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { analyzeFiles } from "../src/analyzer";
-import { cleanupTempDir, createTempDir, createTestFile, defaultConfig } from "./helpers";
+import { defaultConfig, withTempFile } from "./helpers";
 
 // --- Core behavior ---
 
@@ -39,175 +39,117 @@ test("detects circular dependencies", async () => {
 // --- Edge cases: variable declarations ---
 
 test("skips destructured variable declarations without simple identifier", async () => {
-	const dir = createTempDir("analyzer-temp");
-	try {
-		const file = await createTestFile(dir, "test.ts", `const { prop } = { prop: () => "test" };`);
+	await withTempFile(`const { prop } = { prop: () => "test" };`, async (file) => {
 		const [result] = await analyzeFiles([file], defaultConfig);
 		expect(result?.totalFunctions).toBe(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
 test("skips declarations without initializer", async () => {
-	const dir = createTempDir("analyzer-temp");
-	try {
-		const file = await createTestFile(
-			dir,
-			"test.ts",
-			`let myFunc: () => void;\nmyFunc = () => console.log("test");`,
-		);
+	await withTempFile(`let myFunc: () => void;\nmyFunc = () => console.log("test");`, async (file) => {
 		const [result] = await analyzeFiles([file], defaultConfig);
 		expect(result?.totalFunctions).toBe(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
 test("skips array destructuring", async () => {
-	const dir = createTempDir("analyzer-temp");
-	try {
-		const file = await createTestFile(
-			dir,
-			"test.ts",
-			`const [first, second] = [() => "a", () => "b"];`,
-		);
+	await withTempFile(`const [first, second] = [() => "a", () => "b"];`, async (file) => {
 		const [result] = await analyzeFiles([file], defaultConfig);
 		expect(result?.totalFunctions).toBe(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
 test("counts only functions in mixed variable declarations", async () => {
-	const dir = createTempDir("analyzer-temp");
-	try {
-		const file = await createTestFile(
-			dir,
-			"test.ts",
-			`const notAFunction = 42;
+	await withTempFile(
+		`const notAFunction = 42;
 const thisIsAFunction = () => "function";
 function main() { return thisIsAFunction(); }`,
-		);
-		const [result] = await analyzeFiles([file], defaultConfig);
-		expect(result?.totalFunctions).toBe(2);
-	} finally {
-		cleanupTempDir(dir);
-	}
+		async (file) => {
+			const [result] = await analyzeFiles([file], defaultConfig);
+			expect(result?.totalFunctions).toBe(2);
+		},
+	);
 });
 
 test("counts exported and non-exported functions consistently", async () => {
-	const dir = createTempDir("analyzer-temp");
-	try {
-		const file = await createTestFile(
-			dir,
-			"test.ts",
-			`export const exportedFunc = () => "exported";
+	await withTempFile(
+		`export const exportedFunc = () => "exported";
 const nonExportedFunc = () => "not exported";
 export function exportedDecl() { return "decl"; }
 function nonExportedDecl() { return "not exported"; }`,
-		);
-		const [result] = await analyzeFiles([file], defaultConfig);
-		expect(result?.totalFunctions).toBe(4);
-	} finally {
-		cleanupTempDir(dir);
-	}
+		async (file) => {
+			const [result] = await analyzeFiles([file], defaultConfig);
+			expect(result?.totalFunctions).toBe(4);
+		},
+	);
 });
 
 // --- Edge cases: call graph ---
 
 test("handles arrow functions in call graph", async () => {
-	const dir = createTempDir("analyzer-temp");
-	try {
-		const file = await createTestFile(
-			dir,
-			"test.ts",
-			`const arrowA = () => arrowB();
+	await withTempFile(
+		`const arrowA = () => arrowB();
 const arrowB = () => "B";
 function main() { return arrowA(); }`,
-		);
-		const [result] = await analyzeFiles([file], defaultConfig);
-		expect(result?.violations.length).toBeGreaterThan(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+		async (file) => {
+			const [result] = await analyzeFiles([file], defaultConfig);
+			expect(result?.violations.length).toBeGreaterThan(0);
+		},
+	);
 });
 
 test("handles function expressions", async () => {
-	const dir = createTempDir("analyzer-temp");
-	try {
-		const file = await createTestFile(
-			dir,
-			"test.ts",
-			`const funcExpr = function() { return helper(); };
+	await withTempFile(
+		`const funcExpr = function() { return helper(); };
 function helper() { return "helper"; }
 function main() { return funcExpr(); }`,
-		);
-		const [result] = await analyzeFiles([file], defaultConfig);
-		expect(result?.totalFunctions).toBeGreaterThan(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+		async (file) => {
+			const [result] = await analyzeFiles([file], defaultConfig);
+			expect(result?.totalFunctions).toBeGreaterThan(0);
+		},
+	);
 });
 
 test("handles shared dependency (multiple callers)", async () => {
-	const dir = createTempDir("analyzer-temp");
-	try {
-		const file = await createTestFile(
-			dir,
-			"test.ts",
-			`function d() { return 42; }
+	await withTempFile(
+		`function d() { return 42; }
 function c() { return d(); }
 function b() { return d(); }
 function a() { return b() + c(); }`,
-		);
-		const [result] = await analyzeFiles([file], defaultConfig);
-		expect(result?.totalFunctions).toBe(4);
-		expect(result?.violations.length).toBeGreaterThan(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+		async (file) => {
+			const [result] = await analyzeFiles([file], defaultConfig);
+			expect(result?.totalFunctions).toBe(4);
+			expect(result?.violations.length).toBeGreaterThan(0);
+		},
+	);
 });
 
 test("handles standalone functions with no dependencies", async () => {
-	const dir = createTempDir("analyzer-temp");
-	try {
-		const file = await createTestFile(
-			dir,
-			"test.ts",
-			`function a() { return 1; }
+	await withTempFile(
+		`function a() { return 1; }
 function b() { return 2; }
 function c() { return 3; }`,
-		);
-		const [result] = await analyzeFiles([file], defaultConfig);
-		expect(result?.totalFunctions).toBe(3);
-		expect(result?.violations).toHaveLength(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+		async (file) => {
+			const [result] = await analyzeFiles([file], defaultConfig);
+			expect(result?.totalFunctions).toBe(3);
+			expect(result?.violations).toHaveLength(0);
+		},
+	);
 });
 
 // --- Edge cases: empty / malformed ---
 
 test("handles empty files", async () => {
-	const dir = createTempDir("analyzer-temp");
-	try {
-		const file = await createTestFile(dir, "test.ts", "");
+	await withTempFile("", async (file) => {
 		const [result] = await analyzeFiles([file], defaultConfig);
 		expect(result?.totalFunctions).toBe(0);
 		expect(result?.violations).toHaveLength(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
 test("handles files with only comments", async () => {
-	const dir = createTempDir("analyzer-temp");
-	try {
-		const file = await createTestFile(dir, "test.ts", "// comment\n/* block */");
+	await withTempFile("// comment\n/* block */", async (file) => {
 		const [result] = await analyzeFiles([file], defaultConfig);
 		expect(result?.totalFunctions).toBe(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });

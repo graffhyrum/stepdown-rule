@@ -1,14 +1,13 @@
 import { expect, test } from "bun:test";
 import { analyzeFiles } from "../src/analyzer";
 import { fixFiles } from "../src/fixer";
-import { cleanupTempDir, createTempDir, createTestFile, defaultConfig, fixConfig } from "./helpers";
+import { copyFixtureToTemp, defaultConfig, fixConfig, withTempFile } from "./helpers";
 
 // --- Core fix behavior ---
 
 test("reorders functions to fix violations", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const code = `function helper() { return "helper"; }
+	await withTempFile(
+		`function helper() { return "helper"; }
 // padding
 // 1
 // 2
@@ -20,181 +19,158 @@ test("reorders functions to fix violations", async () => {
 // 8
 // 9
 // 10
-function main() { return helper(); }`;
-		const file = await createTestFile(dir, "test.ts", code);
-		const [result] = await fixFiles([file], fixConfig);
+function main() { return helper(); }`,
+		async (file) => {
+			const [result] = await fixFiles([file], fixConfig);
 
-		expect(result?.fixed).toBe(true);
-		expect(result?.reordered).toBeGreaterThan(0);
-		expect(result?.errors).toHaveLength(0);
+			expect(result?.fixed).toBe(true);
+			expect(result?.reordered).toBeGreaterThan(0);
+			expect(result?.errors).toHaveLength(0);
 
-		const content = await Bun.file(file).text();
-		expect(content.indexOf("function main")).toBeLessThan(content.indexOf("function helper"));
-	} finally {
-		cleanupTempDir(dir);
-	}
+			const content = await Bun.file(file).text();
+			expect(content.indexOf("function main")).toBeLessThan(content.indexOf("function helper"));
+		},
+	);
 });
 
 test("fixes stepdown when callee-only helper is defined first (multiple callers)", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const code = `function sharedHelper() { return "ok"; }
+	await withTempFile(
+		`function sharedHelper() { return "ok"; }
 function callerA() { return sharedHelper(); }
 function callerB() { return sharedHelper(); }
-function callerC() { return sharedHelper(); }`;
-		const file = await createTestFile(dir, "test.ts", code);
-		const [result] = await fixFiles([file], fixConfig);
+function callerC() { return sharedHelper(); }`,
+		async (file) => {
+			const [result] = await fixFiles([file], fixConfig);
 
-		expect(result?.fixed, "fixer should fix stepdown violations").toBe(true);
-		expect(result?.errors).toHaveLength(0);
-		const content = await Bun.file(file).text();
-		expect(content).toContain("function sharedHelper()");
-		expect(content).toContain("function callerA()");
-		expect(content).toContain("function callerB()");
-		expect(content).toContain("function callerC()");
-		const idxHelper = content.indexOf("function sharedHelper()");
-		const idxA = content.indexOf("function callerA()");
-		const idxB = content.indexOf("function callerB()");
-		const idxC = content.indexOf("function callerC()");
-		expect(idxA).toBeLessThan(idxHelper);
-		expect(idxB).toBeLessThan(idxHelper);
-		expect(idxC).toBeLessThan(idxHelper);
-	} finally {
-		cleanupTempDir(dir);
-	}
+			expect(result?.fixed, "fixer should fix stepdown violations").toBe(true);
+			expect(result?.errors).toHaveLength(0);
+			const content = await Bun.file(file).text();
+			expect(content).toContain("function sharedHelper()");
+			expect(content).toContain("function callerA()");
+			expect(content).toContain("function callerB()");
+			expect(content).toContain("function callerC()");
+			const idxHelper = content.indexOf("function sharedHelper()");
+			const idxA = content.indexOf("function callerA()");
+			const idxB = content.indexOf("function callerB()");
+			const idxC = content.indexOf("function callerC()");
+			expect(idxA).toBeLessThan(idxHelper);
+			expect(idxB).toBeLessThan(idxHelper);
+			expect(idxC).toBeLessThan(idxHelper);
+		},
+	);
 });
 
 test("does not modify files with no violations", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const code = `function main() { return helper(); }
-function helper() { return "helper"; }`;
-		const file = await createTestFile(dir, "test.ts", code);
-		const original = await Bun.file(file).text();
+	await withTempFile(
+		`function main() { return helper(); }
+function helper() { return "helper"; }`,
+		async (file) => {
+			const original = await Bun.file(file).text();
 
-		const [result] = await fixFiles([file], fixConfig);
+			const [result] = await fixFiles([file], fixConfig);
 
-		expect(result?.fixed).toBe(false);
-		expect(result?.reordered).toBe(0);
-		expect(await Bun.file(file).text()).toBe(original);
-	} finally {
-		cleanupTempDir(dir);
-	}
+			expect(result?.fixed).toBe(false);
+			expect(result?.reordered).toBe(0);
+			expect(await Bun.file(file).text()).toBe(original);
+		},
+	);
 });
 
 test("preserves imports and exports", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const code = `import { something } from "somewhere";
+	await withTempFile(
+		`import { something } from "somewhere";
 function helper() { return something(); }
 function main() { return helper(); }
-export { main };`;
-		const file = await createTestFile(dir, "test.ts", code);
-		const [result] = await fixFiles([file], fixConfig);
+export { main };`,
+		async (file) => {
+			const [result] = await fixFiles([file], fixConfig);
 
-		expect(result?.fixed).toBe(true);
-		const content = await Bun.file(file).text();
-		expect(content.indexOf("import")).toBeLessThan(content.indexOf("function"));
-		expect(content.indexOf("export")).toBeGreaterThan(content.indexOf("function"));
-	} finally {
-		cleanupTempDir(dir);
-	}
+			expect(result?.fixed).toBe(true);
+			const content = await Bun.file(file).text();
+			expect(content.indexOf("import")).toBeLessThan(content.indexOf("function"));
+			expect(content.indexOf("export")).toBeGreaterThan(content.indexOf("function"));
+		},
+	);
 });
 
 test("handles arrow functions", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const code = `const helper = () => "helper";
-const main = () => helper();`;
-		const file = await createTestFile(dir, "test.ts", code);
-		const [result] = await fixFiles([file], fixConfig);
+	await withTempFile(
+		`const helper = () => "helper";
+const main = () => helper();`,
+		async (file) => {
+			const [result] = await fixFiles([file], fixConfig);
 
-		expect(result?.fixed).toBe(true);
-		expect(result?.errors).toHaveLength(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+			expect(result?.fixed).toBe(true);
+			expect(result?.errors).toHaveLength(0);
+		},
+	);
 });
 
 test("handles mixed declarations and arrows", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const code = `const arrowHelper = () => "arrow";
+	await withTempFile(
+		`const arrowHelper = () => "arrow";
 function declHelper() { return "decl"; }
-function main() { return arrowHelper() + declHelper(); }`;
-		const file = await createTestFile(dir, "test.ts", code);
-		const [result] = await fixFiles([file], fixConfig);
+function main() { return arrowHelper() + declHelper(); }`,
+		async (file) => {
+			const [result] = await fixFiles([file], fixConfig);
 
-		expect(result?.fixed).toBe(true);
-		expect(result?.errors).toHaveLength(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+			expect(result?.fixed).toBe(true);
+			expect(result?.errors).toHaveLength(0);
+		},
+	);
 });
 
 test("handles complex dependency chains", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const code = `function level3() { return "base"; }
+	await withTempFile(
+		`function level3() { return "base"; }
 function level2a() { level3(); }
 function level2b() { level3(); }
-function level1() { level2a(); level2b(); }`;
-		const file = await createTestFile(dir, "test.ts", code);
-		const [result] = await fixFiles([file], fixConfig);
+function level1() { level2a(); level2b(); }`,
+		async (file) => {
+			const [result] = await fixFiles([file], fixConfig);
 
-		expect(result?.fixed).toBe(true);
-		const content = await Bun.file(file).text();
-		const i1 = content.indexOf("function level1");
-		const i2a = content.indexOf("function level2a");
-		const i2b = content.indexOf("function level2b");
-		const i3 = content.indexOf("function level3");
-		expect(i1).toBeLessThan(i2a);
-		expect(i1).toBeLessThan(i2b);
-		expect(i2a).toBeLessThan(i3);
-		expect(i2b).toBeLessThan(i3);
-	} finally {
-		cleanupTempDir(dir);
-	}
+			expect(result?.fixed).toBe(true);
+			const content = await Bun.file(file).text();
+			const i1 = content.indexOf("function level1");
+			const i2a = content.indexOf("function level2a");
+			const i2b = content.indexOf("function level2b");
+			const i3 = content.indexOf("function level3");
+			expect(i1).toBeLessThan(i2a);
+			expect(i1).toBeLessThan(i2b);
+			expect(i2a).toBeLessThan(i3);
+			expect(i2b).toBeLessThan(i3);
+		},
+	);
 });
 
 // --- Bead fixtures (1e0, 27g) ---
 
 test("1e0: fixes factory with method calling helper", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const content = await Bun.file("fixtures/test-factory-method-calls.ts").text();
-		const file = await createTestFile(dir, "test.ts", content);
+	const content = await Bun.file("fixtures/test-factory-method-calls.ts").text();
+	await withTempFile(content, async (file) => {
 		const [result] = await fixFiles([file], fixConfig);
 
 		expect(result?.fixed).toBe(true);
 		expect(result?.errors).toHaveLength(0);
 		const [analysis] = await analyzeFiles([file], defaultConfig);
 		expect(analysis?.violations.length).toBe(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
 test("27g: fixes arrow const chain", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const content = await Bun.file("fixtures/test-arrow-chain.ts").text();
-		const file = await createTestFile(dir, "test.ts", content);
+	const content = await Bun.file("fixtures/test-arrow-chain.ts").text();
+	await withTempFile(content, async (file) => {
 		const [result] = await fixFiles([file], fixConfig);
 
 		expect(result?.fixed).toBe(true);
 		const [analysis] = await analyzeFiles([file], defaultConfig);
 		expect(analysis?.violations.length).toBe(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
 test("27g: order-repo style - caller above callee", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const content = await Bun.file("fixtures/test-order-repo-27g.ts").text();
-		const file = await createTestFile(dir, "test.ts", content);
+	const content = await Bun.file("fixtures/test-order-repo-27g.ts").text();
+	await withTempFile(content, async (file) => {
 		const [result] = await fixFiles([file], fixConfig);
 
 		expect(result?.fixed).toBe(true);
@@ -207,67 +183,46 @@ test("27g: order-repo style - caller above callee", async () => {
 		expect(createIdx).toBeLessThan(parseIdx);
 		expect(mapIdx).toBeLessThan(validateIdx);
 		expect(parseIdx).toBeLessThan(validateIdx);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
 // --- Error / edge cases ---
 
 test("returns empty for non-matching patterns", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const results = await fixFiles(["non-existent-*.ts"], fixConfig);
-		expect(results).toHaveLength(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	const results = await fixFiles(["non-existent-*.ts"], fixConfig);
+	expect(results).toHaveLength(0);
 });
 
 test("handles files with no functions", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const file = await createTestFile(dir, "test.ts", "const x = 42;\nconsole.log(x);");
+	await withTempFile("const x = 42;\nconsole.log(x);", async (file) => {
 		const [result] = await fixFiles([file], fixConfig);
 		expect(result?.fixed).toBe(false);
 		expect(result?.reordered).toBe(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
 test("handles circular dependencies without crashing", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const code = `function a() { b(); }
+	await withTempFile(
+		`function a() { b(); }
 function b() { c(); }
-function c() { a(); }`;
-		const file = await createTestFile(dir, "test.ts", code);
-		const [result] = await fixFiles([file], fixConfig);
-		expect(result).toBeDefined();
-	} finally {
-		cleanupTempDir(dir);
-	}
+function c() { a(); }`,
+		async (file) => {
+			const [result] = await fixFiles([file], fixConfig);
+			expect(result).toBeDefined();
+		},
+	);
 });
 
 test("handles files with only imports and exports", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const file = await createTestFile(dir, "test.ts", `import { x } from "x";\nexport { x };`);
+	await withTempFile(`import { x } from "x";\nexport { x };`, async (file) => {
 		const [result] = await fixFiles([file], fixConfig);
 		expect(result?.fixed).toBe(false);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
 test("handles syntax errors gracefully", async () => {
-	const dir = createTempDir("fixer-temp");
-	try {
-		const file = await createTestFile(dir, "test.ts", "function broken() {\n  // no close");
+	await withTempFile("function broken() {\n  // no close", async (file) => {
 		const [result] = await fixFiles([file], fixConfig);
 		expect(result).toBeDefined();
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });

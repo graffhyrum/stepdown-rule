@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { analyzeFiles } from "../src/analyzer";
 import { fixFiles } from "../src/fixer";
-import { cleanupTempDir, createTempDir, createTestFile, defaultConfig, fixConfig } from "./helpers";
+import { defaultConfig, fixConfig, withTempFile } from "./helpers";
 
 test("detects nested function before logic when not referenced", async () => {
 	const results = await analyzeFiles(["fixtures/test-nested-violation.ts"], defaultConfig);
@@ -23,21 +23,16 @@ test("does not flag nested function after return", async () => {
 });
 
 test("does not flag nested function when referenced in return", async () => {
-	const dir = createTempDir("nested-temp");
-	try {
-		const file = await createTestFile(
-			dir,
-			"test.ts",
-			`function parent() {
+	await withTempFile(
+		`function parent() {
 	function helper() { return "I help"; }
 	return helper();
 }`,
-		);
-		const [result] = await analyzeFiles([file], defaultConfig);
-		expect(result?.nestedFunctionViolations.length).toBe(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+		async (file) => {
+			const [result] = await analyzeFiles([file], defaultConfig);
+			expect(result?.nestedFunctionViolations.length).toBe(0);
+		},
+	);
 });
 
 test("does not flag nested arrow when referenced", async () => {
@@ -56,17 +51,14 @@ test("does not flag nested when referenced in logic", async () => {
 });
 
 test("db8/aka: detects and fixes stepdown in .derive() callback", async () => {
-	const dir = createTempDir("nested-temp");
-	try {
-		const code = `
+	const code = `
 const sessionPlugin = { derive: (fn: () => unknown) => fn() }.derive(() => {
   const getSessionId = () => "id";
   const ensureSessionCookie = () => getSessionId();
   return { getSessionId, ensureSessionCookie };
 });
 `;
-		const file = await createTestFile(dir, "test.ts", code);
-
+	await withTempFile(code, async (file) => {
 		const [before] = await analyzeFiles([file], defaultConfig);
 		expect(before?.violations.length).toBeGreaterThan(0);
 		expect(before?.violations.some((v) => v.dependency.name === "getSessionId")).toBe(true);
@@ -75,7 +67,5 @@ const sessionPlugin = { derive: (fn: () => unknown) => fn() }.derive(() => {
 
 		const [after] = await analyzeFiles([file], defaultConfig);
 		expect(after?.violations.length).toBe(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });

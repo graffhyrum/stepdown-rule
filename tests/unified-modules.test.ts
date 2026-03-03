@@ -25,6 +25,9 @@ import {
 } from "../src/graph-algorithms";
 import type { FunctionInfo } from "../src/types";
 
+const parseCode = (code: string) =>
+	parseCode(code);
+
 // ============ ast-graph-builder tests ============
 
 test("extractFunctionNames extracts all function names from FunctionInfo array", () => {
@@ -49,7 +52,7 @@ test("extractFunctionNames extracts all function names from FunctionInfo array",
 
 test("extractFunctionName extracts from FunctionDeclaration", () => {
 	const code = "function hello() { return 'world'; }";
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 	const funcNode = sourceFile.statements[0];
 
 	const name = extractFunctionName(funcNode, sourceFile);
@@ -58,7 +61,7 @@ test("extractFunctionName extracts from FunctionDeclaration", () => {
 
 test("extractFunctionName extracts from arrow function variable statement", () => {
 	const code = "const myFunc = () => 'test';";
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 	const varNode = sourceFile.statements[0];
 
 	const name = extractFunctionName(varNode, sourceFile);
@@ -67,7 +70,7 @@ test("extractFunctionName extracts from arrow function variable statement", () =
 
 test("extractFunctionName returns name even for non-function variable (delegates filtering to caller)", () => {
 	const code = "const x = 42;";
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 	const varNode = sourceFile.statements[0];
 
 	const name = extractFunctionName(varNode, sourceFile);
@@ -78,7 +81,7 @@ test("extractFunctionName returns name even for non-function variable (delegates
 test("buildDependencyGraph creates mapping of functions to their dependencies", () => {
 	const code = `function a() { b(); }
 function b() { return 'done'; }`;
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 	const funcNodes = sourceFile.statements.map((s) => ({ node: s, info: null }));
 
 	const graph = buildDependencyGraph(funcNodes, sourceFile);
@@ -98,7 +101,7 @@ test("extractDependenciesFor finds all called functions in a block", () => {
 function a() {}
 function b() {}
 function c() {}`;
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 	const mainNode = sourceFile.statements[0];
 
 	const funcNames = new Map([
@@ -117,7 +120,7 @@ test("extractDependenciesFor deduplicates dependencies", () => {
   a();
 }
 function a() {}`;
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 	const mainNode = sourceFile.statements[0];
 
 	const funcNames = new Map([["a", sourceFile.statements[1]]]);
@@ -129,7 +132,7 @@ function a() {}`;
 test("buildCallGraph creates call graph with function call locations", () => {
 	const code = `function main() { helper(); }
 function helper() { return 'test'; }`;
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 
 	const funcs: FunctionInfo[] = [
 		{ name: "main", parentFunction: null, position: { start: 0, line: 1 } },
@@ -147,7 +150,7 @@ function helper() { return 'test'; }`;
 test("findContainingFunction identifies parent function of call expression", () => {
 	const code = `function outer() { inner(); }
 function inner() {}`;
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 
 	// Find the call expression (inner())
 	let callNode: ts.Node | null = null;
@@ -388,7 +391,7 @@ function foo() {}
 const bar = () => {};
 const x = 42;
 export { foo };`;
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 
 	const categorized = categorizeNodes(sourceFile);
 
@@ -402,7 +405,7 @@ test("categorizeNodes identifies arrow functions in variable statements", () => 
 	const code = `const foo = () => "result";
 const bar = () => "another";
 const baz = 42;`;
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 
 	const categorized = categorizeNodes(sourceFile);
 
@@ -414,7 +417,7 @@ test("categorizeNodes handles mixed function declarations", () => {
 	const code = `function decl() {}
 const arrow = () => {};
 const value = 10;`;
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 
 	const categorized = categorizeNodes(sourceFile);
 
@@ -428,7 +431,7 @@ function foo() { bar(); }
 const y = 42;
 function bar() {}
 export { foo };`;
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 
 	const categorized = categorizeNodes(sourceFile);
 	const reordered = categorized.functions.reverse(); // reverse for testing
@@ -444,7 +447,7 @@ export { foo };`;
 
 test("visitAllNodes visits every node in tree", () => {
 	const code = "function foo(x) { return x + 1; }";
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 	const visited: ts.SyntaxKind[] = [];
 
 	visitAllNodes(sourceFile, (node) => {
@@ -458,7 +461,7 @@ test("visitAllNodes visits every node in tree", () => {
 
 test("findNodes finds all nodes matching predicate", () => {
 	const code = "const x = 1; const y = 2; const z = 3;";
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 
 	const identifiers = findNodes(sourceFile, ts.isIdentifier);
 
@@ -468,7 +471,7 @@ test("findNodes finds all nodes matching predicate", () => {
 
 test("findNodes returns empty array when no matches", () => {
 	const code = "const x = 1;";
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 
 	const calls = findNodes(sourceFile, ts.isCallExpression);
 
@@ -477,7 +480,7 @@ test("findNodes returns empty array when no matches", () => {
 
 test("findFirstNode returns first matching node", () => {
 	const code = "function foo() {} function bar() {}";
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 
 	const firstFunc = findFirstNode(sourceFile, ts.isFunctionDeclaration);
 
@@ -490,7 +493,7 @@ test("findFirstNode returns first matching node", () => {
 
 test("findFirstNode returns null when no match found", () => {
 	const code = "const x = 1;";
-	const sourceFile = ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
+	const sourceFile = parseCode(code);
 
 	const result = findFirstNode(sourceFile, ts.isCallExpression);
 

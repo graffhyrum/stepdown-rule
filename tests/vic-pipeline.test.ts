@@ -12,7 +12,7 @@ import {
 	getViolationFixture,
 	type ViolationType,
 } from "../src/violation-coverage";
-import { cleanupTempDir, createTempDir, createTestFile } from "./helpers";
+import { defaultConfig, totalViolations, withTempFile } from "./helpers";
 
 test("vic: pipeline uses registry; each actionable rule has fix coverage", async () => {
 	const rules = list();
@@ -23,21 +23,10 @@ test("vic: pipeline uses registry; each actionable rule has fix coverage", async
 	}
 	for (const violationType of ACTIONABLE_VIOLATION_TYPES) {
 		const fixture = getViolationFixture(violationType as ViolationType);
-		const dir = createTempDir(`vic-${violationType}`);
-		try {
-			const file = await createTestFile(dir, "test.ts", fixture);
-			const config = {
-				ignore: [] as string[],
-				analyzeArrowFunctions: true,
-				analyzeExportsOnly: false,
-				reportCircularDependencies: true,
-				fix: false,
-				json: false,
-				enabledRuleIds,
-			};
+		await withTempFile(fixture, async (file) => {
+			const config = { ...defaultConfig, enabledRuleIds };
 			const [before] = await analyzeFiles([file], config);
-			const violationsBefore =
-				(before?.violations.length ?? 0) + (before?.nestedFunctionViolations.length ?? 0);
+			const violationsBefore = totalViolations(before);
 			expect(
 				violationsBefore,
 				`${violationType} fixture must produce violations via pipeline`,
@@ -46,11 +35,8 @@ test("vic: pipeline uses registry; each actionable rule has fix coverage", async
 			await fixFiles([file], { ...config, fix: true });
 
 			const [after] = await analyzeFiles([file], config);
-			const violationsAfter =
-				(after?.violations.length ?? 0) + (after?.nestedFunctionViolations.length ?? 0);
+			const violationsAfter = totalViolations(after);
 			expect(violationsAfter).toBeLessThan(violationsBefore);
-		} finally {
-			cleanupTempDir(dir);
-		}
+		});
 	}
 });

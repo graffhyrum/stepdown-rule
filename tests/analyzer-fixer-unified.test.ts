@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import ts from "typescript";
 import { analyzeFiles, analyzeParsedFile } from "../src/analyzer";
 import { fixFiles, fixParsedFile } from "../src/fixer";
-import { cleanupTempDir, createTempDir, createTestFile, fixConfig } from "./helpers";
+import { fixConfig, totalViolations, withTempFile } from "./helpers";
 
 /**
  * hje: Fixer must use analyzer's dependency graph.
@@ -43,25 +43,18 @@ test("hje: analyze→fix→analyze converges", async () => {
 const callee = () => "leaf";
 const caller = () => callee();
 `;
-	const dir = createTempDir("hje-temp");
-	try {
-		const file = await createTestFile(dir, "converge.ts", content);
-
+	await withTempFile(content, async (file) => {
 		const [before] = await analyzeFiles([file], fixConfig);
-		const violationsBefore =
-			(before?.violations.length ?? 0) + (before?.nestedFunctionViolations.length ?? 0);
+		const violationsBefore = totalViolations(before);
 
 		await fixFiles([file], fixConfig);
 
 		const [after] = await analyzeFiles([file], fixConfig);
-		const violationsAfter =
-			(after?.violations.length ?? 0) + (after?.nestedFunctionViolations.length ?? 0);
+		const violationsAfter = totalViolations(after);
 
 		expect(violationsAfter).toBeLessThanOrEqual(violationsBefore);
 		expect(violationsAfter).toBe(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
 /**
@@ -74,9 +67,7 @@ function callerA() { return sharedHelper(); }
 function callerB() { return sharedHelper(); }
 function callerC() { return sharedHelper(); }
 `;
-	const dir = createTempDir("stepdown-fix-temp");
-	try {
-		const file = await createTestFile(dir, "stepdown.ts", content);
+	await withTempFile(content, async (file) => {
 		const [before] = await analyzeFiles([file], fixConfig);
 		const stepdownBefore = before?.violations.length ?? 0;
 		expect(stepdownBefore).toBeGreaterThan(0);
@@ -88,7 +79,5 @@ function callerC() { return sharedHelper(); }
 		const [after] = await analyzeFiles([file], fixConfig);
 		const stepdownAfter = after?.violations.length ?? 0;
 		expect(stepdownAfter).toBe(0);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });

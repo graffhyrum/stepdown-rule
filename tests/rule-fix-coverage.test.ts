@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { analyzeFiles } from "../src/analyzer";
 import { fixFiles } from "../src/fixer";
 import type { Config } from "../src/types";
-import { cleanupTempDir, createTempDir, createTestFile, defaultConfig } from "./helpers";
+import { defaultConfig, withTempFile } from "./helpers";
 
 /**
  * Tests that rule-based fixing (fixFileWithRules) correctly handles violations.
@@ -15,11 +15,7 @@ const rulesPipelineConfig: Config = {
 	enabledRuleIds: ["stepdown"],
 };
 
-test("rule-fix: detects and fixes stepdown violations when using rules pipeline", async () => {
-	const dir = createTempDir("rule-fix-temp");
-	try {
-		// This is the actual violation from src/analyzer.ts
-		const code = `function buildRuleContext(parsedFile: ParsedFile): RuleContext {
+const violatingCode = `function buildRuleContext(parsedFile: ParsedFile): RuleContext {
   return {} as Record<string, unknown>;
 }
 
@@ -31,8 +27,8 @@ export function analyzeWithRules(
   return {} as Record<string, unknown>;
 }`;
 
-		const file = await createTestFile(dir, "test.ts", code);
-
+test("rule-fix: detects and fixes stepdown violations when using rules pipeline", async () => {
+	await withTempFile(violatingCode, async (file) => {
 		// First verify the violation is detected
 		const [analysis] = await analyzeFiles([file], defaultConfig);
 		expect(analysis?.violations.length).toBeGreaterThan(0);
@@ -56,59 +52,37 @@ export function analyzeWithRules(
 			buildIdx,
 			"analyzeWithRules should now come before buildRuleContext",
 		);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
 test("rule-fix: handles exported functions correctly", async () => {
-	const dir = createTempDir("rule-fix-temp");
-	try {
-		const code = `function helper(): string { return "h"; }
+	await withTempFile(
+		`function helper(): string { return "h"; }
 
-export function main(): string { return helper(); }`;
+export function main(): string { return helper(); }`,
+		async (file) => {
+			// Verify violation exists
+			const [analysis] = await analyzeFiles([file], defaultConfig);
+			expect(analysis?.violations.length).toBeGreaterThan(0);
 
-		const file = await createTestFile(dir, "test.ts", code);
+			// Fix it
+			const [fixResult] = await fixFiles([file], rulesPipelineConfig);
+			expect(fixResult?.fixed).toBe(true);
 
-		// Verify violation exists
-		const [analysis] = await analyzeFiles([file], defaultConfig);
-		expect(analysis?.violations.length).toBeGreaterThan(0);
+			// Verify no violations after fix
+			const [reanalysis] = await analyzeFiles([file], defaultConfig);
+			expect(reanalysis?.violations.length).toBe(0);
 
-		// Fix it
-		const [fixResult] = await fixFiles([file], rulesPipelineConfig);
-		expect(fixResult?.fixed).toBe(true);
-
-		// Verify no violations after fix
-		const [reanalysis] = await analyzeFiles([file], defaultConfig);
-		expect(reanalysis?.violations.length).toBe(0);
-
-		// Verify content
-		const fixed = await Bun.file(file).text();
-		expect(fixed).toContain("export function main");
-		expect(fixed).toContain("function helper");
-	} finally {
-		cleanupTempDir(dir);
-	}
+			// Verify content
+			const fixed = await Bun.file(file).text();
+			expect(fixed).toContain("export function main");
+			expect(fixed).toContain("function helper");
+		},
+	);
 });
 
 test("rule-fix: legacy path - fixFiles with no enabledRuleIds", async () => {
-	const dir = createTempDir("rule-fix-temp");
-	try {
-		// This is the actual violation from src/analyzer.ts
-		const code = `function buildRuleContext(parsedFile: ParsedFile): RuleContext {
-  return {} as Record<string, unknown>;
-}
-
-export function analyzeWithRules(
-  parsedFile: ParsedFile,
-  enabledRules: Array<unknown>,
-): AnalysisResult {
-  const ctx = buildRuleContext(parsedFile);
-  return {} as Record<string, unknown>;
-}`;
-
-		const file = await createTestFile(dir, "test.ts", code);
-
+	await withTempFile(violatingCode, async (file) => {
 		// First verify the violation is detected
 		const [analysis] = await analyzeFiles([file], defaultConfig);
 		expect(analysis?.violations.length).toBeGreaterThan(0);
@@ -133,52 +107,6 @@ export function analyzeWithRules(
 			buildIdx,
 			"analyzeWithRules should now come before buildRuleContext",
 		);
-	} finally {
-		cleanupTempDir(dir);
-	}
+	});
 });
 
-test("rule pipeline correctly fixes violations with stepdown rule", async () => {
-	const dir = createTempDir("rule-fix-temp");
-	try {
-		// Simple case: stepdown violation with no circular dependencies
-		const code = `function buildRuleContext(parsedFile: ParsedFile): RuleContext {
-  return {} as Record<string, unknown>;
-}
-
-export function analyzeWithRules(
-  parsedFile: ParsedFile,
-  enabledRules: Array<unknown>,
-): AnalysisResult {
-  const ctx = buildRuleContext(parsedFile);
-  return {} as Record<string, unknown>;
-}`;
-
-		const file = await createTestFile(dir, "test.ts", code);
-
-		// Verify violation is detected
-		const [analysis] = await analyzeFiles([file], defaultConfig);
-		expect(analysis?.violations.length).toBeGreaterThan(0, "Should detect stepdown violation");
-
-		// Fix with rules pipeline
-		const [fixResult] = await fixFiles([file], rulesPipelineConfig);
-
-		expect(fixResult?.fixed, "Should fix the stepdown violation").toBe(true);
-		expect(fixResult?.errors).toHaveLength(0);
-
-		// Verify the fix worked
-		const [reanalysis] = await analyzeFiles([file], defaultConfig);
-		expect(reanalysis?.violations.length, "After fix, should have no stepdown violations").toBe(0);
-
-		// Verify content changed - analyzeWithRules should come before buildRuleContext
-		const fixed = await Bun.file(file).text();
-		const buildIdx = fixed.indexOf("buildRuleContext");
-		const analyzeIdx = fixed.indexOf("analyzeWithRules");
-		expect(analyzeIdx).toBeLessThan(
-			buildIdx,
-			"analyzeWithRules should come before buildRuleContext (it calls it)",
-		);
-	} finally {
-		cleanupTempDir(dir);
-	}
-});
