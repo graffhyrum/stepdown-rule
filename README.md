@@ -35,12 +35,11 @@ Then import and use programmatically:
 
 ```typescript
 import { analyzeFiles, fixFiles } from "@stepdown/analyzer";
+import { FileService } from "@stepdown/analyzer/services/FileService";
 
-const results = await analyzeFiles(["src/**/*.ts"], {
-  analyzeArrowFunctions: true,
-  analyzeExportsOnly: false,
-  reportCircularDependencies: true,
-});
+const fileService = new FileService();
+const config = { ignore: [], fix: false, json: false };
+const results = await analyzeFiles(["src/**/*.ts"], config, fileService);
 
 console.log(results);
 ```
@@ -56,35 +55,43 @@ stepdown-rule "src/**/*.ts"
 ### CLI
 
 ```bash
-# Analyze current directory
+# Analyze default (src/**/*.ts)
 stepdown-rule
 
 # Analyze specific files/globs
-stepdown-rule "src/**/*.ts" "lib/**/*.ts"
+stepdown-rule analyze "src/**/*.ts" "lib/**/*.ts"
+
+# Analyze a directory (auto-expands to **/*.ts)
+stepdown-rule analyze src/
 
 # Auto-fix violations
-stepdown-rule --fix
+stepdown-rule fix
+
+# Fix specific files
+stepdown-rule fix "src/**/*.ts"
 
 # Show circular dependencies (verbose mode)
-stepdown-rule --verbose
+stepdown-rule analyze --verbose
 
 # JSON output for CI
-stepdown-rule --json --output-file results.json
+stepdown-rule analyze --json
+
+# Only run specific rules
+stepdown-rule analyze --rules stepdown,nested
 
 # Custom ignore patterns
-stepdown-rule --ignore "test/**/*" "generated/**/*"
+stepdown-rule analyze --ignore "test/**/*" "generated/**/*"
 ```
 
 ### Programmatic
 
 ```typescript
 import { analyzeFiles, fixFiles } from "@stepdown/analyzer";
+import { FileService } from "@stepdown/analyzer/services/FileService";
 
-const results = await analyzeFiles(["src/**/*.ts"], {
-  analyzeArrowFunctions: true,
-  analyzeExportsOnly: false,
-  reportCircularDependencies: true,
-});
+const fileService = new FileService();
+const config = { ignore: [], fix: false, json: false };
+const results = await analyzeFiles(["src/**/*.ts"], config, fileService);
 
 console.log(results);
 ```
@@ -149,10 +156,7 @@ Create a `.stepdownrc.json` file (optional):
 ```json
 {
   "$schema": "./stepdown-schema.json",
-  "ignore": ["node_modules/**", "dist/**", "*.test.ts", "*.spec.ts"],
-  "analyzeArrowFunctions": true,
-  "analyzeExportsOnly": false,
-  "reportCircularDependencies": true
+  "ignore": ["node_modules/**", "dist/**", "*.test.ts", "*.spec.ts"]
 }
 ```
 
@@ -160,29 +164,26 @@ Create a `.stepdownrc.json` file (optional):
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `ignore` | `string[]` | `[]` | Array of glob patterns to ignore when analyzing files |
-| `analyzeArrowFunctions` | `boolean` | `true` | Whether to analyze arrow functions for stepdown violations |
-| `analyzeExportsOnly` | `boolean` | `false` | Whether to only analyze exported functions |
-| `reportCircularDependencies` | `boolean` | `true` | Whether to report circular dependencies |
+| `ignore` | `string[]` | `[]` | Additional glob patterns to ignore when analyzing files |
 
 ## CLI Options
 
-- `patterns` - File patterns to analyze (default: `src/**/*.ts`)
-- `--fix` - Automatically fix violations by reordering functions
-- `--verbose` - Show circular dependencies in output (only actionable violations shown by default)
+- `patterns` - File patterns or directories to analyze (default: `src/**/*.ts`)
+- `--verbose` - Show circular dependencies in output
 - `--json` - Output results in JSON format
-- `--output-file <file>` - Write JSON output to file
+- `--rules <ids>` - Comma-separated rule IDs to run (available: `stepdown`, `nested`; default: all)
 - `--ignore <patterns...>` - Additional ignore patterns
-- `--config <file>` - Configuration file path
+- `--config <file>` - Configuration file path (default: `.stepdownrc.json`)
 
 ## Development
 
 ```bash
 bun install
-bun run dev # Run CLI
-bun run build # Build
-bun run test # Test
-bun run lint # Lint
+bun run dev      # Run CLI from source
+bun run build    # Build
+bun test         # Test
+bun run check    # Lint (biome)
+bun run vet      # Full pipeline: build + typecheck + lint + test
 ```
 
 ## License

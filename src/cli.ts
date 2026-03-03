@@ -23,7 +23,10 @@ const verboseOption = new Option("-v, --verbose", "Show circular dependencies in
 	false,
 );
 
-const rulesOption = new Option("--rules <ids>", "Comma-separated rule ids to run (default: all)");
+const rulesOption = new Option(
+	"--rules <ids>",
+	"Comma-separated rule IDs (available: stepdown, nested; default: all)",
+);
 
 const patternsArgument = new Argument(
 	"[patterns...]",
@@ -49,10 +52,16 @@ analyzeCommand
 	.action(async (patterns: string[], options) => {
 		const config = await createConfig(options);
 		const fileService = new FileService({ ignore: config.ignore });
-		const results = await analyzeFiles(getPatterns(patterns), config, fileService);
+		const resolvedPatterns = getPatterns(patterns);
+		const files = await fileService.resolveFiles(resolvedPatterns);
+		if (files.length === 0) {
+			console.log(picocolors.yellow(`No files matched: ${resolvedPatterns.join(", ")}`));
+			return;
+		}
+		const results = await analyzeFiles(resolvedPatterns, config, fileService);
 		outputAnalysisResults(results, config.json, options.verbose);
 		const counts = countAnalysisResults(results);
-		if (counts.violationCount > 0 || counts.circularCount > 0) {
+		if (counts.violationCount > 0) {
 			process.exitCode = 1;
 		}
 	});
@@ -70,11 +79,17 @@ fixCommand
 	.action(async (patterns: string[], options) => {
 		const config = await createFixConfig(options);
 		const fileService = new FileService({ ignore: config.ignore });
-		const fixResults = await fixFiles(getPatterns(patterns), config, fileService);
-		outputFixResults(fixResults, config.json, options.verbose);
+		const resolvedPatterns = getPatterns(patterns);
+		const files = await fileService.resolveFiles(resolvedPatterns);
+		if (files.length === 0) {
+			console.log(picocolors.yellow(`No files matched: ${resolvedPatterns.join(", ")}`));
+			return;
+		}
+		const fixResults = await fixFiles(resolvedPatterns, config, fileService);
+		outputFixResults(fixResults, config.json);
 	});
 
-program.addCommand(analyzeCommand);
+program.addCommand(analyzeCommand, { isDefault: true });
 program.addCommand(fixCommand);
 
 program.parse();
@@ -121,7 +136,7 @@ function outputAnalysisResults(results: AnalysisResult[], json: boolean, verbose
 	}
 	const counts = countAnalysisResults(results);
 	printFormattedResults(results, verbose);
-	printAnalysisSummary(counts, verbose);
+	printAnalysisSummary(counts);
 }
 
 function countAnalysisResults(results: AnalysisResult[]): {
@@ -147,15 +162,14 @@ function printFormattedResults(results: AnalysisResult[], verbose: boolean): voi
 	}
 }
 
-function printAnalysisSummary(
-	counts: ReturnType<typeof countAnalysisResults>,
-	verbose: boolean,
-): void {
+function printAnalysisSummary(counts: ReturnType<typeof countAnalysisResults>): void {
 	const { violationCount, totalFiles, circularCount } = counts;
 	if (violationCount === 0 && circularCount === 0) {
-		if (verbose) {
-			console.log(picocolors.green("✓ No stepdown violations found"));
-		}
+		console.log(
+			picocolors.green(
+				`✓ ${totalFiles} file${totalFiles !== 1 ? "s" : ""} analyzed, no violations`,
+			),
+		);
 		return;
 	}
 	const parts: string[] = [];
@@ -220,7 +234,7 @@ function formatViolation(file: string, violation: AnalysisResult["violations"][n
 	return `${header}\n${callSiteLink}\n${depLink}`;
 }
 
-function outputFixResults(results: FixResult[], json: boolean, verbose = false): void {
+function outputFixResults(results: FixResult[], json: boolean): void {
 	if (json) {
 		console.log(JSON.stringify(results, null, 2));
 		return;
@@ -233,7 +247,7 @@ function outputFixResults(results: FixResult[], json: boolean, verbose = false):
 	for (const result of failedFiles) {
 		console.log(formatFixResult(result));
 	}
-	if (changedFiles.length === 0 && failedFiles.length === 0 && verbose) {
+	if (changedFiles.length === 0 && failedFiles.length === 0) {
 		console.log(picocolors.green("✓ No files needed fixing"));
 	}
 }
@@ -243,5 +257,5 @@ function formatFixResult(result: FixResult): string {
 		return picocolors.green(`✓ Fixed: ${result.file} (reordered ${result.reordered} functions)`);
 	}
 	const errors = result.errors.map((error) => picocolors.red(`  ${error}`)).join("\n");
-	return picocolors.red(`✗ No changes: ${result.file}`) + (errors ? `\n${errors}` : "");
+	return picocolors.red(`✗ Failed: ${result.file}`) + (errors ? `\n${errors}` : "");
 }

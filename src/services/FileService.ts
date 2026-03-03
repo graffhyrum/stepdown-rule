@@ -1,3 +1,4 @@
+import { lstatSync } from "node:fs";
 import { glob } from "glob";
 import ts from "typescript";
 import type { FileServiceOptions, IFileService, ParsedFile } from "./types";
@@ -11,7 +12,8 @@ export class FileService implements IFileService {
 
 	async resolveFiles(patterns: string[]): Promise<string[]> {
 		const allFiles: string[] = [];
-		for (const pattern of patterns) {
+		const expandedPatterns = patterns.map(normalizePattern);
+		for (const pattern of expandedPatterns) {
 			const matches = await glob(pattern, {
 				ignore: ["node_modules/**", "dist/**", "coverage/**", "*.d.ts", ...this.ignore],
 			});
@@ -37,4 +39,16 @@ export class FileService implements IFileService {
 	async writeFile(filePath: string, content: string): Promise<void> {
 		await Bun.write(filePath, content);
 	}
+}
+
+function normalizePattern(pattern: string): string {
+	try {
+		if (lstatSync(pattern).isDirectory()) {
+			const sep = pattern.endsWith("/") ? "" : "/";
+			return `${pattern}${sep}**/*.ts`;
+		}
+	} catch {
+		/* not a filesystem path — use as glob */
+	}
+	return pattern;
 }
