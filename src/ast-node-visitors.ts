@@ -104,8 +104,8 @@ export function reconstructStatements(
 ): ts.Statement[] {
 	return [
 		...(categorized.imports as ts.Statement[]),
-		...(reorderedFunctions.map((f) => f.node) as ts.Statement[]),
 		...(categorized.other as ts.Statement[]),
+		...(reorderedFunctions.map((f) => f.node) as ts.Statement[]),
 		...(categorized.exports as ts.Statement[]),
 	];
 }

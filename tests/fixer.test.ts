@@ -227,3 +227,22 @@ test("handles syntax errors gracefully", async () => {
 		expect(result).toBeDefined();
 	});
 });
+
+test("non-function const stays before functions after fix (no TDZ)", async () => {
+	await withTempFile(
+		`const CONFIG = { timeout: 5000 };
+function helper() { return CONFIG.timeout; }
+function main() { return helper(); }`,
+		async (file) => {
+			const [result] = await fixFiles([file], fixConfig);
+
+			expect(result?.errors).toHaveLength(0);
+			const content = await Bun.file(file).text();
+			const configIdx = content.indexOf("const CONFIG");
+			const mainIdx = content.indexOf("function main");
+			const helperIdx = content.indexOf("function helper");
+			expect(configIdx).toBeLessThan(mainIdx);
+			expect(configIdx).toBeLessThan(helperIdx);
+		},
+	);
+});

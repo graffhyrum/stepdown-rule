@@ -383,7 +383,7 @@ const value = 10;`;
 	expect(categorized.other).toHaveLength(1);
 });
 
-test("reconstructStatements rebuilds file in import-function-other-export order", () => {
+test("reconstructStatements rebuilds file in import-other-function-export order", () => {
 	const code = `import { x } from "lib";
 function foo() { bar(); }
 const y = 42;
