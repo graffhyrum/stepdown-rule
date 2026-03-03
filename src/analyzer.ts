@@ -195,24 +195,20 @@ function buildCallGraph(
 }
 function extractFunctions(sourceFile: ts.SourceFile): FunctionInfo[] {
 	const functions: FunctionInfo[] = [];
-	const fileLevelIdentifiers = collectFileLevelIdentifiers(sourceFile);
 	visit(sourceFile, null);
 	return functions;
 	function visit(node: ts.Node, parentFunction: string | null) {
 		if (ts.isFunctionDeclaration(node) && node.name) {
 			const funcName = node.name.getText(sourceFile);
 			handleFunctionDeclaration({ name: node.name, node, sourceFile, functions, parentFunction });
-			// Continue traversing with this function as the parent
 			ts.forEachChild(node, (child) => visit(child, funcName));
 			return;
 		}
 		if (ts.isVariableStatement(node)) {
-			// Check if this variable statement contains a function
 			const context: VariableStatementContext = {
 				sourceFile,
 				functions,
 				parentFunction,
-				fileLevelIdentifiers,
 			};
 			const funcName = handleVariableStatement(node, context);
 			if (funcName) {
@@ -299,114 +295,8 @@ function createVariableFunctionInfo(
 		},
 		isExported: hasExportModifier(node),
 		dependencies: [],
-		canBeFunctionDeclaration: isFunctionLike(declaration.initializer)
-			? canConvertToFunctionDeclaration(
-					declaration.initializer as ts.FunctionLikeDeclaration,
-					context.fileLevelIdentifiers,
-				)
-			: false,
 		parentFunction: context.parentFunction,
 	};
-}
-function canConvertToFunctionDeclaration(
-	node: ts.FunctionLikeDeclaration,
-	fileLevelIdentifiers: Set<string>,
-): boolean {
-	if (!hasNoThisKeyword(node)) return false;
-	const safeIdentifiers = buildSafeIdentifiers(node, fileLevelIdentifiers);
-	return hasNoExternalVariableReferences({ node, safeIdentifiers });
-}
-function buildSafeIdentifiers(
-	fn: ts.FunctionLikeDeclaration,
-	fileLevelIdentifiers: Set<string>,
-): Set<string> {
-	const names = new Set(fileLevelIdentifiers);
-	for (const id of collectParameterNames(fn)) names.add(id);
-	return names;
-}
-function hasNoThisKeyword(node: ts.Node): boolean {
-	if (node.kind === ts.SyntaxKind.ThisKeyword) {
-		return false;
-	}
-	for (const child of node.getChildren()) {
-		if (!hasNoThisKeyword(child)) {
-			return false;
-		}
-	}
-	return true;
-}
-function collectFileLevelIdentifiers(sourceFile: ts.SourceFile): Set<string> {
-	const names = collectSourceFileFunctionNames(sourceFile);
-	for (const id of collectImportIdentifiers(sourceFile)) names.add(id);
-	return names;
-}
-function collectSourceFileFunctionNames(sourceFile: ts.SourceFile): Set<string> {
-	const functionNames = new Set<string>();
-	visit(sourceFile);
-	return functionNames;
-	function visit(node: ts.Node) {
-		if (ts.isFunctionDeclaration(node) && node.name) {
-			functionNames.add(node.name.getText(sourceFile));
-		}
-		ts.forEachChild(node, visit);
-	}
-}
-function hasNoExternalVariableReferences({
-	node,
-	safeIdentifiers,
-}: {
-	node: ts.Node;
-	safeIdentifiers: Set<string>;
-}): boolean {
-	if (
-		ts.isIdentifier(node) &&
-		!safeIdentifiers.has(node.text) &&
-		!isNonValueIdentifierContext(node)
-	)
-		return false;
-	return node
-		.getChildren()
-		.every((child) => hasNoExternalVariableReferences({ node: child, safeIdentifiers }));
-}
-function isNonValueIdentifierContext(node: ts.Identifier): boolean {
-	const { parent } = node;
-	if (!parent) return false;
-	const isAccessExpr =
-		ts.isPropertyAccessExpression(parent) || ts.isElementAccessExpression(parent);
-	const isTypeOrBindingKey =
-		ts.isTypeNode(parent) || (ts.isBindingElement(parent) && parent.propertyName === node);
-	return isAccessExpr || isTypeOrBindingKey;
-}
-function collectImportIdentifiers(sourceFile: ts.SourceFile): Set<string> {
-	const names = new Set<string>();
-	const importDecls = sourceFile.statements.filter(ts.isImportDeclaration);
-	for (const decl of importDecls) {
-		if (decl.importClause) collectImportClauseNames(decl.importClause, names);
-	}
-	return names;
-}
-function collectImportClauseNames(clause: ts.ImportClause, names: Set<string>): void {
-	if (clause.name) names.add(clause.name.text);
-	if (!clause.namedBindings) return;
-	if (ts.isNamespaceImport(clause.namedBindings)) {
-		names.add(clause.namedBindings.name.text);
-		return;
-	}
-	for (const el of clause.namedBindings.elements) names.add(el.name.text);
-}
-function collectParameterNames(fn: ts.FunctionLikeDeclaration): Set<string> {
-	const names = new Set<string>();
-	for (const param of fn.parameters) collectBindingNames(param.name, names);
-	return names;
-}
-function collectBindingNames(pattern: ts.BindingName, names: Set<string>): void {
-	if (ts.isIdentifier(pattern)) {
-		names.add(pattern.text);
-		return;
-	}
-	for (const el of pattern.elements) {
-		if (!ts.isOmittedExpression(el)) collectBindingNames(el.name, names);
-	}
 }
 function handleFunctionDeclaration({
 	name,
@@ -432,7 +322,6 @@ function handleFunctionDeclaration({
 		},
 		isExported: hasExportModifier(node),
 		dependencies: [],
-		canBeFunctionDeclaration: true,
 		parentFunction,
 	};
 	functions.push(functionInfo);
@@ -795,5 +684,4 @@ interface VariableStatementContext {
 	sourceFile: ts.SourceFile;
 	functions: FunctionInfo[];
 	parentFunction: string | null;
-	fileLevelIdentifiers: Set<string>;
 }

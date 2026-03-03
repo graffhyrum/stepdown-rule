@@ -9,7 +9,6 @@ export interface FunctionInfo {
 	};
 	isExported: boolean;
 	dependencies: string[];
-	canBeFunctionDeclaration: boolean;
 	/** Name of the parent function if this is a nested function, null for top-level functions */
 	parentFunction: string | null;
 }
