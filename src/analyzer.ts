@@ -3,8 +3,7 @@ import { callGraphToDependencyMap } from "./ast-graph-builder";
 import { getPosition, getPositionFromOffset, isFunctionLike } from "./ast-utils";
 import { detectCircularDependencies as detectCycles } from "./graph-algorithms";
 import { getEnabled } from "./registry";
-import type { CallSiteInfo } from "./rule-context";
-import type { RuleContext, Violation } from "./rule-context";
+import type { CallSiteInfo, RuleContext, Violation } from "./rule-context";
 import { FileService } from "./services/FileService";
 import type { ParsedFile } from "./services/types";
 import type {
@@ -464,23 +463,28 @@ function findFunctionNode(
 	sourceFile: ts.SourceFile,
 ): ts.FunctionLikeDeclaration | null {
 	function visit(node: ts.Node): ts.FunctionLikeDeclaration | null {
-		if (
-			(ts.isFunctionDeclaration(node) ||
-				ts.isArrowFunction(node) ||
-				ts.isFunctionExpression(node)) &&
-			node.getStart() === funcInfo.position.start
-		) {
-			return node as ts.FunctionLikeDeclaration;
-		}
-		if (ts.isVariableStatement(node) && node.getStart() === funcInfo.position.start) {
-			const init = node.declarationList.declarations[0]?.initializer;
-			if (init && isFunctionLike(init)) {
-				return init as ts.FunctionLikeDeclaration;
-			}
+		const match = matchFunctionNode(node, funcInfo.position.start);
+		if (match) {
+			return match;
 		}
 		return ts.forEachChild(node, visit) || null;
 	}
 	return visit(sourceFile);
+}
+function matchFunctionNode(node: ts.Node, targetStart: number): ts.FunctionLikeDeclaration | null {
+	if (
+		(ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
+		node.getStart() === targetStart
+	) {
+		return node as ts.FunctionLikeDeclaration;
+	}
+	if (ts.isVariableStatement(node) && node.getStart() === targetStart) {
+		const init = node.declarationList.declarations[0]?.initializer;
+		if (init && isFunctionLike(init)) {
+			return init as ts.FunctionLikeDeclaration;
+		}
+	}
+	return null;
 }
 function isStepdownViolation(v: Violation): v is StepdownViolation {
 	return "dependency" in v;

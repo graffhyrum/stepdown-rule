@@ -18,4 +18,3 @@ export const ConfigSchema = type({
 export type Config = typeof ConfigSchema.infer;
 
 export const ConfigJsonSchema = ConfigSchema.toJsonSchema();
-

@@ -32,4 +32,3 @@ export async function loadConfig(configPath?: string): Promise<typeof FileConfig
 		throw error;
 	}
 }
-
