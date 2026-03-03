@@ -1,7 +1,9 @@
 import ts from "typescript";
 import { callGraphToDependencyMap } from "./ast-graph-builder";
 import { getPosition, getPositionFromOffset, isFunctionLike } from "./ast-utils";
+import { detectCircularDependencies as detectCycles } from "./graph-algorithms";
 import { getEnabled } from "./registry";
+import type { CallSiteInfo } from "./rule-context";
 import type { RuleContext, Violation } from "./rule-context";
 import { FileService } from "./services/FileService";
 import type { ParsedFile } from "./services/types";
@@ -113,40 +115,8 @@ function detectCircularDependencies(
 	functions: FunctionInfo[],
 	callGraph: Map<string, CallSiteInfo[]>,
 ): string[][] {
-	const context: CircularDepsContext = {
-		cycles: [],
-		visited: new Set<string>(),
-		recursionStack: new Set<string>(),
-		path: [],
-		callGraph,
-	};
-	for (const func of functions) {
-		if (!context.visited.has(func.name)) {
-			dfsDetectCycle(func.name, context);
-		}
-	}
-	return context.cycles;
-}
-function dfsDetectCycle(funcName: string, context: CircularDepsContext): void {
-	if (context.recursionStack.has(funcName)) {
-		const cycle = extractCycle(funcName, context);
-		if (isValidCycle(cycle)) {
-			context.cycles.push(cycle);
-		}
-		return;
-	}
-	if (context.visited.has(funcName)) {
-		return;
-	}
-	context.visited.add(funcName);
-	context.recursionStack.add(funcName);
-	context.path.push(funcName);
-	const callSites = context.callGraph.get(funcName) || [];
-	for (const { calledFunction } of callSites) {
-		dfsDetectCycle(calledFunction, context);
-	}
-	context.recursionStack.delete(funcName);
-	context.path.pop();
+	const names = new Set(functions.map((f) => f.name));
+	return detectCycles(callGraph, names);
 }
 export function buildRuleContext(parsedFile: ParsedFile): RuleContext {
 	const { sourceFile } = parsedFile;
@@ -615,14 +585,6 @@ function buildCyclePairs(cycles: string[][]): Set<string> {
 function pairKey(a: string, b: string): string {
 	return `${a}\0${b}`;
 }
-function extractCycle(funcName: string, context: CircularDepsContext): string[] {
-	const cycleStart = context.path.indexOf(funcName);
-	return [...context.path.slice(cycleStart), funcName];
-}
-function isValidCycle(cycle: string[]): boolean {
-	// Skip self-recursive cycles (e.g., "A → A → A")
-	return cycle.length > 2 || (cycle.length === 2 && cycle[0] !== cycle[1]);
-}
 function checkVariableDeclaration(
 	current: ts.Node,
 	node: ts.Node,
@@ -649,10 +611,6 @@ function hasExportModifier(node: ts.Node): boolean {
 	}
 	const modifiers = ts.getModifiers(node);
 	return !!modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
-}
-interface CallSiteInfo {
-	calledFunction: string;
-	callSite: CallSite;
 }
 interface NestedViolationContext {
 	sourceFile: ts.SourceFile;
@@ -684,13 +642,6 @@ interface ViolationCheckParams {
 	lastLogicLine: number;
 	violations: NestedFunctionViolation[];
 	sourceFile: ts.SourceFile;
-}
-interface CircularDepsContext {
-	cycles: string[][];
-	visited: Set<string>;
-	recursionStack: Set<string>;
-	path: string[];
-	callGraph: Map<string, CallSiteInfo[]>;
 }
 interface VariableStatementContext {
 	sourceFile: ts.SourceFile;
