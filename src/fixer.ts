@@ -44,7 +44,7 @@ export async function runPipeline(
 	const service = fileService ?? new FileService({ ignore: config.ignore });
 	const files = await service.resolveFiles(patterns);
 	const enabledRules = getEnabled(config.enabledRuleIds);
-	const useRulePipeline = config.enabledRuleIds !== undefined && enabledRules.length > 0;
+	const useRulePipeline = config.enabledRuleIds !== undefined;
 	const analysisResults: AnalysisResult[] = [];
 	const fixResults: FixResult[] = [];
 	for (const filePath of files) {
@@ -93,7 +93,7 @@ async function processOneFile(params: {
 		}
 		return { analysisResult, fixResult: result };
 	}
-	const fixResult = await processAndFixLegacy(analysisResult, config, service);
+	const fixResult = await processAnalysisResult(analysisResult, config, service);
 	return { analysisResult, fixResult };
 }
 export function fixFileWithRules(params: {
@@ -121,13 +121,6 @@ export function fixFileWithRules(params: {
 		reordered: fixed ? countFunctionMovements(originalContent, content) : 0,
 		errors: [],
 	};
-}
-function processAndFixLegacy(
-	result: AnalysisResult,
-	config: Config,
-	service: FileService,
-): Promise<FixResult> {
-	return processAnalysisResult(result, config, service);
 }
 async function processAnalysisResult(
 	result: AnalysisResult,
@@ -231,8 +224,9 @@ function reorderFunctionDeclarations(
 	analyzerDependencyGraph?: Map<string, string[]>,
 ): string {
 	const categorized = categorizeNodes(sourceFile);
-	const dependencies =
+	const rawDeps =
 		analyzerDependencyGraph ?? buildDependencyGraph(categorized.functions, sourceFile).dependencies;
+	const dependencies = new Map([...rawDeps].map(([k, v]) => [k, [...v]]));
 	const reorderedFunctions = reorderFunctions(categorized.functions, dependencies, sourceFile);
 	const newStatements = reconstructStatements(categorized, reorderedFunctions);
 	let newSourceFile = ts.factory.updateSourceFile(sourceFile, newStatements);

@@ -54,6 +54,10 @@ analyzeCommand
 		const fileService = new FileService({ ignore: config.ignore });
 		const results = await analyzeFiles(getPatterns(patterns), config, fileService);
 		outputAnalysisResults(results, config.json, options.verbose);
+		const counts = countAnalysisResults(results);
+		if (counts.violationCount > 0 || counts.circularCount > 0) {
+			process.exitCode = 1;
+		}
 	});
 
 const fixCommand = new Command();

@@ -8,7 +8,6 @@ export interface FunctionInfo {
 		end: number;
 	};
 	isExported: boolean;
-	dependencies: string[];
 	/** Name of the parent function if this is a nested function, null for top-level functions */
 	parentFunction: string | null;
 }

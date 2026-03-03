@@ -30,7 +30,7 @@ export async function analyzeFiles(
 	const files = await service.resolveFiles(patterns);
 	const enabledRules = getEnabled(config.enabledRuleIds);
 	const results: AnalysisResult[] = [];
-	const useRulePipeline = config.enabledRuleIds !== undefined && enabledRules.length > 0;
+	const useRulePipeline = config.enabledRuleIds !== undefined;
 	for (const filePath of files) {
 		const parsedFile = await service.parseFile(filePath);
 		const result = useRulePipeline
@@ -294,7 +294,6 @@ function createVariableFunctionInfo(
 			end: node.getEnd(),
 		},
 		isExported: hasExportModifier(node),
-		dependencies: [],
 		parentFunction: context.parentFunction,
 	};
 }
@@ -321,7 +320,6 @@ function handleFunctionDeclaration({
 			end: node.getEnd(),
 		},
 		isExported: hasExportModifier(node),
-		dependencies: [],
 		parentFunction,
 	};
 	functions.push(functionInfo);
@@ -597,11 +595,25 @@ function filterOutCircularViolations(
 	violations: StepdownViolation[],
 	circularDependencies: string[][],
 ): StepdownViolation[] {
-	const functionsInCycles = new Set(circularDependencies.flat());
-	// Keep only violations where neither function is part of a cycle
-	return violations.filter(
-		(v) => !(functionsInCycles.has(v.function.name) || functionsInCycles.has(v.dependency.name)),
-	);
+	const cyclePairs = buildCyclePairs(circularDependencies);
+	return violations.filter((v) => !cyclePairs.has(pairKey(v.function.name, v.dependency.name)));
+}
+function buildCyclePairs(cycles: string[][]): Set<string> {
+	const pairs = new Set<string>();
+	for (const cycle of cycles) {
+		for (let i = 0; i < cycle.length - 1; i++) {
+			const a = cycle[i];
+			const b = cycle[i + 1];
+			if (a && b) {
+				pairs.add(pairKey(a, b));
+				pairs.add(pairKey(b, a));
+			}
+		}
+	}
+	return pairs;
+}
+function pairKey(a: string, b: string): string {
+	return `${a}\0${b}`;
 }
 function extractCycle(funcName: string, context: CircularDepsContext): string[] {
 	const cycleStart = context.path.indexOf(funcName);
