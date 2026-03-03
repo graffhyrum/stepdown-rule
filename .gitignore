@@ -29,6 +29,7 @@ tests/*-temp
 # caches
 .eslintcache
 .cache
+.mcp_data
 *.tsbuildinfo
 
 # IntelliJ based IDEs
