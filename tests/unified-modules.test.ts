@@ -26,7 +26,7 @@ import {
 import type { FunctionInfo } from "../src/types";
 
 const parseCode = (code: string) =>
-	parseCode(code);
+	ts.createSourceFile("test.ts", code, ts.ScriptTarget.Latest, true);
 
 // ============ ast-graph-builder tests ============
 
