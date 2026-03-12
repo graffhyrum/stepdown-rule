@@ -66,6 +66,13 @@ Rules implement `ViolationRule` interface from `src/rule-context.ts`. Both rules
 ### CLI
 `src/cli.ts` uses CommanderJS with two subcommands: `analyze` (default) and `fix`.
 
+**Commander.js help design idioms** (apply when modifying `src/cli.ts`):
+- The idiomatic discoverability path is `stepdown-rule help <subcommand>` / `subcommand --help`. Do not duplicate subcommand option lists into the root help.
+- `addHelpText("after", ...)` is for non-duplicating additions only: example invocations, doc links, env-var references.
+- `showGlobalOptions: true` in `configureHelp` propagates shared parent options *down* into subcommand help — useful for flags added to `program` directly.
+- `configureHelp({ subcommandTerm: (cmd) => cmd.name() })` narrows the Commands table to name-only when usage strings are too wide.
+- **When writing a plan that changes help output, include a rendered mock of `--help` and explicitly note any content duplication.**
+
 ## Test Fixtures
 
 `fixtures/` contains purpose-built `.ts` files that exercise specific violation patterns (circular deps, factory methods, nested functions, DI containers, etc.). Each fixture file has a header comment explaining the pattern it tests.
