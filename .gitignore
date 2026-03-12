@@ -41,3 +41,7 @@ telemetry-id
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# Dolt database
+.dolt/
+*.db

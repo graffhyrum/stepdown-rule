@@ -4,8 +4,24 @@ dolt-access.lock
 
 # Runtime files
 bd.sock
+bd.sock.startlock
 sync-state.json
 last-touched
+ephemeral.sqlite3
+ephemeral.sqlite3-shm
+ephemeral.sqlite3-wal
+
+# Dolt server runtime files
+dolt-server.pid
+dolt-server.log
+dolt-server.lock
+dolt-server.port
+dolt-server.activity
+dolt-monitor.pid
+dolt-monitor.pid.lock
+
+# Backup directory
+backup/
 
 # Local version tracking (prevents upgrade notification spam after git ops)
 .local_version
