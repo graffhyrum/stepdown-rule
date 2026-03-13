@@ -1,7 +1,11 @@
 import { lstat } from "node:fs/promises";
-import { glob } from "glob";
+import { resolve, sep } from "node:path";
+import { type IgnoreLike, glob } from "glob";
+import { minimatch } from "minimatch";
 import ts from "typescript";
 import type { FileServiceOptions, IFileService, ParsedFile } from "./types";
+
+const IGNORED_DIRS = ["node_modules", "dist", "coverage"];
 
 export class FileService implements IFileService {
 	private ignore: string[];
@@ -11,10 +15,11 @@ export class FileService implements IFileService {
 	}
 
 	async resolveFiles(patterns: string[]): Promise<string[]> {
-		const expandedPatterns = await Promise.all(patterns.map(normalizePattern));
-		const ignore = ["node_modules/**", "dist/**", "coverage/**", "*.d.ts", ...this.ignore];
-		const results = await Promise.all(expandedPatterns.map((pattern) => glob(pattern, { ignore })));
-		return [...new Set(results.flat())].sort((a, b) => a.localeCompare(b));
+		const expanded = await Promise.all(patterns.map(normalizePattern));
+		const ignore = buildIgnore();
+		const results = await Promise.all(expanded.map((p) => glob(p, { ignore })));
+		const unique = [...new Set(results.flat())].sort((a, b) => a.localeCompare(b));
+		return applyUserIgnore(unique, this.ignore);
 	}
 
 	async parseFile(filePath: string): Promise<ParsedFile> {
@@ -32,6 +37,7 @@ export class FileService implements IFileService {
 	}
 
 	async writeFile(filePath: string, content: string): Promise<void> {
+		assertWriteSafe(filePath);
 		await Bun.write(filePath, content);
 	}
 }
@@ -40,11 +46,34 @@ async function normalizePattern(pattern: string): Promise<string> {
 	try {
 		const stat = await lstat(pattern);
 		if (stat.isDirectory()) {
-			const sep = pattern.endsWith("/") ? "" : "/";
-			return `${pattern}${sep}**/*.ts`;
+			const trailing = pattern.endsWith("/") ? "" : "/";
+			return `${pattern}${trailing}**/*.ts`;
 		}
 	} catch {
 		/* not a filesystem path — use as glob */
 	}
 	return pattern;
+}
+
+function buildIgnore(): IgnoreLike {
+	const isDirIgnored = (p: { isNamed(n: string): boolean }): boolean =>
+		IGNORED_DIRS.some((d) => p.isNamed(d));
+	return {
+		childrenIgnored: isDirIgnored,
+		ignored(p) {
+			return isDirIgnored(p) || p.name.endsWith(".d.ts");
+		},
+	};
+}
+
+function applyUserIgnore(paths: string[], patterns: string[]): string[] {
+	if (patterns.length === 0) return paths;
+	return paths.filter((p) => !patterns.some((pat) => minimatch(p, pat)));
+}
+
+function assertWriteSafe(filePath: string): void {
+	const segments = resolve(filePath).split(sep);
+	if (segments.includes("node_modules") || segments.includes(".git")) {
+		throw new Error(`Refusing to write to protected path: ${filePath}`);
+	}
 }

@@ -43,17 +43,18 @@
 		"vet": "bun fastvet"
 	},
 	"dependencies": {
-		"arktype": "^2.1.29",
+		"arktype": "^2.2.0",
 		"commander": "^14.0.3",
 		"glob": "^13.0.6",
+		"minimatch": "^10.2.4",
 		"picocolors": "^1.1.1",
 		"typescript": "^5.9.3"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.4.5",
-		"@changesets/cli": "^2.29.8",
+		"@biomejs/biome": "^2.4.7",
+		"@changesets/cli": "^2.30.0",
 		"@types/bun": "^1.3.10",
-		"@types/node": "^25.3.3"
+		"@types/node": "^25.5.0"
 	},
 	"engines": {
 		"node": ">=18.0.0"
