@@ -221,6 +221,54 @@ test("handles files with only imports and exports", async () => {
 	});
 });
 
+test("reorders functions inside arrow callback bodies (describe pattern)", async () => {
+	// Include a top-level violation to trigger the fixer pipeline,
+	// which then also fixes nested callback ordering via transformNestedBlocks
+	await withTempFile(
+		`function topHelper() { return "h"; }
+function topMain() { return topHelper(); }
+const run = (name: string, fn: () => void) => fn();
+run("suite", () => {
+  function helper() { return 42; }
+  function caller() { return helper(); }
+});`,
+		async (file) => {
+			const [result] = await fixFiles([file], fixConfig);
+			expect(result?.fixed).toBe(true);
+			const content = await Bun.file(file).text();
+			expect(content.indexOf("function caller")).toBeLessThan(content.indexOf("function helper"));
+		},
+	);
+});
+
+test("reorders exported function declarations", async () => {
+	await withTempFile(
+		`export function helper() { return "h"; }
+export function main() { return helper(); }`,
+		async (file) => {
+			const [result] = await fixFiles([file], fixConfig);
+			expect(result?.fixed).toBe(true);
+			const content = await Bun.file(file).text();
+			expect(content.indexOf("function main")).toBeLessThan(content.indexOf("function helper"));
+		},
+	);
+});
+
+test("reorders const arrow function chains", async () => {
+	await withTempFile(
+		`const leaf = () => "leaf";
+const middle = () => leaf();
+const top = () => middle();`,
+		async (file) => {
+			const [result] = await fixFiles([file], fixConfig);
+			expect(result?.fixed).toBe(true);
+			const content = await Bun.file(file).text();
+			expect(content.indexOf("top")).toBeLessThan(content.indexOf("middle"));
+			expect(content.indexOf("middle")).toBeLessThan(content.indexOf("leaf"));
+		},
+	);
+});
+
 test("handles syntax errors gracefully", async () => {
 	await withTempFile("function broken() {\n  // no close", async (file) => {
 		const [result] = await fixFiles([file], fixConfig);

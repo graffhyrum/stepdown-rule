@@ -126,6 +126,21 @@ test("handles files with only comments", () => {
 	expect(result.totalFunctions).toBe(0);
 });
 
+test("same-named functions in different arrow callback scopes don't produce cross-scope violations", () => {
+	const result = analyzeCode(`const run = (name: string, fn: () => void) => fn();
+run("suite1", () => {
+  function helper() { return 1; }
+  function main() { return helper(); }
+});
+run("suite2", () => {
+  function helper() { return 2; }
+  function main() { return helper(); }
+});`);
+	// Functions inside callbacks should have a parent scope — not appear as top-level
+	// No stepdown violations should be reported across scopes
+	expect(result.violations).toHaveLength(0);
+});
+
 test("arrow parent with referenced nested function has no false-positive nested violation", () => {
 	const result = analyzeCode(`const parent = () => {
   const x = helper();

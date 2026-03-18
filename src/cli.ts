@@ -33,6 +33,8 @@ const rulesOption = new Option(
 	"Comma-separated subset of rules to run: 'stepdown' (caller-before-callee at module scope), 'nested' (logic-before-nested-functions inside a body); omit to run all",
 );
 
+const subcommandNames = ["fix", "analyze"];
+
 const patternsArgument = new Argument(
 	"[patterns...]",
 	'File patterns to analyze (default: "src/**/*.ts")',
@@ -57,6 +59,13 @@ analyzeCommand
 	.addOption(verboseOption)
 	.addOption(rulesOption)
 	.action(async (patterns: string[], options) => {
+		const misplaced = patterns.find((p) => subcommandNames.includes(p));
+		if (misplaced) {
+			console.error(`Error: "${misplaced}" looks like a subcommand, not a file pattern.`);
+			console.error(`Usage: stepdown-rule ${misplaced} <patterns...>`);
+			process.exitCode = 2;
+			return;
+		}
 		const config = await createConfig(options);
 		const fileService = new FileService({ ignore: config.ignore });
 		if (await hasNoFiles(fileService, patterns)) return;
@@ -134,7 +143,7 @@ async function hasNoFiles(fileService: FileService, patterns: string[]): Promise
 
 function outputAnalysisResults(results: AnalysisResult[], json: boolean, verbose = false): void {
 	if (json) {
-		console.log(JSON.stringify(results, null, 2));
+		console.log(JSON.stringify(sanitizeForJson(results), null, 2));
 		return;
 	}
 	const counts = countAnalysisResults(results);
@@ -261,4 +270,26 @@ function formatFixResult(result: FixResult): string {
 	}
 	const errors = result.errors.map((error) => picocolors.red(`  ${error}`)).join("\n");
 	return picocolors.red(`✗ Failed: ${result.file}`) + (errors ? `\n${errors}` : "");
+}
+function sanitizeForJson(results: AnalysisResult[]): AnalysisResult[] {
+	return results.map((r) => ({
+		...r,
+		violations: r.violations.map((v) => ({
+			...v,
+			function: { ...v.function, parentFunction: stripAnonymousScope(v.function.parentFunction) },
+			dependency: {
+				...v.dependency,
+				parentFunction: stripAnonymousScope(v.dependency.parentFunction),
+			},
+		})),
+		nestedFunctionViolations: r.nestedFunctionViolations.map((v) => ({
+			...v,
+			parent: { ...v.parent, parentFunction: stripAnonymousScope(v.parent.parentFunction) },
+			nested: { ...v.nested, parentFunction: stripAnonymousScope(v.nested.parentFunction) },
+		})),
+	}));
+}
+function stripAnonymousScope(parentFunction: string | null): string | null {
+	if (parentFunction?.includes("<anonymous>")) return null;
+	return parentFunction;
 }

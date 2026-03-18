@@ -186,8 +186,21 @@ function extractFunctions(sourceFile: ts.SourceFile): FunctionInfo[] {
 				return;
 			}
 		}
+		const anonymousScope = getAnonymousScopeName(node, parentFunction);
+		if (anonymousScope) {
+			ts.forEachChild(node, (child) => visitForFunctionExtraction(child, anonymousScope));
+			return;
+		}
 		ts.forEachChild(node, (child) => visitForFunctionExtraction(child, parentFunction));
 	}
+}
+// Arrow/function-expression containers (e.g., describe/test callbacks) create a new scope.
+// Returns null if the node is not an anonymous scope container.
+function getAnonymousScopeName(node: ts.Node, parentFunction: string | null): string | null {
+	// Guard: skip arrow functions whose parent is a VariableDeclaration (already handled by caller)
+	if (!isFunctionLike(node)) return null;
+	if (node.parent && ts.isVariableDeclaration(node.parent)) return null;
+	return parentFunction ? `${parentFunction}.<anonymous>` : "<anonymous>";
 }
 function visitForNestedViolations(node: ts.Node, context: NestedViolationContext): void {
 	const { sourceFile, functionMap } = context;

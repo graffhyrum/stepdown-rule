@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { analyzeFiles } from "../src/analyzer";
-import { fixFiles } from "../src/fixer";
-import { defaultConfig, fixConfig, withTempFile } from "./helpers";
+import { defaultConfig, withTempFile } from "./helpers";
 
 test("detects nested function before logic when not referenced", async () => {
 	const results = await analyzeFiles(["fixtures/test-nested-violation.ts"], defaultConfig);
@@ -50,7 +49,7 @@ test("does not flag nested when referenced in logic", async () => {
 	expect(results[0]?.nestedFunctionViolations.length).toBe(0);
 });
 
-test("db8/aka: detects and fixes stepdown in .derive() callback", async () => {
+test("db8/aka: functions inside .derive() callback are scoped (no false top-level violations)", async () => {
 	const code = `
 const sessionPlugin = { derive: (fn: () => unknown) => fn() }.derive(() => {
   const getSessionId = () => "id";
@@ -59,13 +58,8 @@ const sessionPlugin = { derive: (fn: () => unknown) => fn() }.derive(() => {
 });
 `;
 	await withTempFile(code, async (file) => {
-		const [before] = await analyzeFiles([file], defaultConfig);
-		expect(before?.violations.length).toBeGreaterThan(0);
-		expect(before?.violations.some((v) => v.dependency.name === "getSessionId")).toBe(true);
-
-		await fixFiles([file], fixConfig);
-
-		const [after] = await analyzeFiles([file], defaultConfig);
-		expect(after?.violations.length).toBe(0);
+		// Functions inside .derive() are now properly scoped — no top-level stepdown violations
+		const [result] = await analyzeFiles([file], defaultConfig);
+		expect(result?.violations.length).toBe(0);
 	});
 });

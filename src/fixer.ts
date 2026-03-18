@@ -127,7 +127,7 @@ async function processAnalysisResult(
 	config: Config,
 	service: FileService,
 ): Promise<FixResult> {
-	if (result.violations.length === 0) {
+	if (result.violations.length === 0 && result.nestedFunctionViolations.length === 0) {
 		return createNoViolationsResult(result.file);
 	}
 	return await fixFileWithErrorHandling({
@@ -224,9 +224,8 @@ function reorderFunctionDeclarations(
 	analyzerDependencyGraph?: Map<string, string[]>,
 ): string {
 	const categorized = categorizeNodes(sourceFile);
-	const rawDeps =
+	const dependencies =
 		analyzerDependencyGraph ?? buildDependencyGraph(categorized.functions, sourceFile).dependencies;
-	const dependencies = new Map([...rawDeps].map(([k, v]) => [k, [...v]]));
 	const reorderedFunctions = reorderFunctions(categorized.functions, dependencies, sourceFile);
 	const newStatements = reconstructStatements(categorized, reorderedFunctions);
 	let newSourceFile = ts.factory.updateSourceFile(sourceFile, newStatements);
@@ -246,6 +245,15 @@ function visitForNestedBlocks(node: ts.Node, sourceFile: ts.SourceFile): ts.Node
 			node,
 			node.statements.map((s) => visitForNestedBlocks(s, sourceFile) as ts.Statement),
 		);
+	}
+	// ExpressionStatement wraps CallExpression (e.g., describe("...", () => { ... }))
+	// Limitation: does not cover VariableStatement wrapping CallExpression (const suite = describe(...))
+	if (ts.isExpressionStatement(node)) {
+		const inner = visitForNestedBlocks(node.expression, sourceFile);
+		if (inner !== node.expression) {
+			return ts.factory.updateExpressionStatement(node, inner as ts.Expression);
+		}
+		return node;
 	}
 	if (ts.isVariableStatement(node)) return visitVariableStatementNested(node, sourceFile);
 	if (ts.isCallExpression(node)) return visitCallExpressionNested(node, sourceFile);
@@ -403,12 +411,16 @@ function reorderFunctions(
 		node: ts.Node;
 		info: null;
 	}>,
-	dependencies: Map<string, string[]>,
+	rawDependencies: Map<string, string[]>,
 	sourceFile: ts.SourceFile,
 ): Array<{
 	node: ts.Node;
 	info: null;
 }> {
+	// Clone to avoid mutating caller's graph (findAndRemoveLeafFunctions mutates)
+	const dependencies = new Map(
+		[...rawDependencies].map(([k, v]): [string, string[]] => [k, [...v]]),
+	);
 	const sourceOrder = new Map<string, number>();
 	const nameToFunc = new Map<
 		string,
