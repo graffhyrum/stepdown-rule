@@ -1,6 +1,6 @@
 import { lstat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import { type IgnoreLike, glob } from "glob";
+import { glob, type IgnoreLike } from "glob";
 import { minimatch } from "minimatch";
 import ts from "typescript";
 import type { FileServiceOptions, IFileService, ParsedFile } from "./types";

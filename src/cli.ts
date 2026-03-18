@@ -170,16 +170,16 @@ function printAnalysisSummary(counts: ReturnType<typeof countAnalysisResults>): 
 	if (violationCount === 0 && circularCount === 0) {
 		console.log(
 			picocolors.green(
-				`✓ ${totalFiles} file${totalFiles !== 1 ? "s" : ""} analyzed, no violations`,
+				`✓ ${totalFiles} file${totalFiles === 1 ? "" : "s"} analyzed, no violations`,
 			),
 		);
 		return;
 	}
 	const parts: string[] = [];
 	if (violationCount > 0)
-		parts.push(`${violationCount} violation${violationCount !== 1 ? "s" : ""}`);
+		parts.push(`${violationCount} violation${violationCount === 1 ? "" : "s"}`);
 	if (circularCount > 0)
-		parts.push(`${circularCount} circular dependenc${circularCount !== 1 ? "ies" : "y"}`);
+		parts.push(`${circularCount} circular dependenc${circularCount === 1 ? "y" : "ies"}`);
 	console.log(picocolors.yellow(`\nFound ${parts.join(" and ")} in ${totalFiles} files`));
 }
 

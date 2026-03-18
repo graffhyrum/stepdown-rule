@@ -268,9 +268,9 @@ function visitVariableStatementNested(
 	const newDecls = node.declarationList.declarations.map((d) => {
 		if (!d.initializer) return d;
 		const newInit = visitForNestedBlocks(d.initializer, sourceFile) as ts.Expression;
-		return newInit !== d.initializer
-			? ts.factory.updateVariableDeclaration(d, d.name, d.exclamationToken, d.type, newInit)
-			: d;
+		return newInit === d.initializer
+			? d
+			: ts.factory.updateVariableDeclaration(d, d.name, d.exclamationToken, d.type, newInit);
 	});
 	const changed = newDecls.some((d, i) => d !== node.declarationList.declarations[i]);
 	return changed
