@@ -36,9 +36,9 @@ bun test --test-name-pattern "reorders"   # run tests matching pattern
 bun run build            # build (scripts/build.ts + tsc declarations)
 bun run dev              # run CLI from source
 bun run typecheck        # tsc --noEmit
-bun run check            # biome check (lint + format)
-bun run fix              # biome check --write (auto-fix)
-bun run vet              # full pipeline: build → typecheck → biome fix → custom-hooks → test:coverage
+bun run check            # oxlint + oxfmt --check
+bun run fix              # oxlint --fix + oxfmt --write
+bun run vet              # full pipeline: build → typecheck → fix → custom-hooks → test:coverage
 ```
 
 ## Architecture
