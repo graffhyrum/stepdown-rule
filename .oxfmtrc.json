@@ -1,0 +1,28 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"ignorePatterns": [
+		"node_modules/**",
+		"dist/**",
+		"build/**",
+		".idea/**",
+		".beads/**",
+		".sisyphus/**",
+		".specstory/**",
+		"public/**",
+		"fixtures/**",
+		"docs/**",
+		"documents/**",
+		"plans/**",
+		"**/*.md",
+		"**/*.test.ts"
+	],
+	"printWidth": 100,
+	"tabWidth": 2,
+	"useTabs": true,
+	"semi": true,
+	"singleQuote": false,
+	"trailingComma": "all",
+	"bracketSpacing": true,
+	"quoteProps": "as-needed",
+	"arrowParens": "always"
+}
