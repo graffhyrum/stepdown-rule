@@ -24,6 +24,7 @@ import {
 } from "./exit-codes";
 import { FileService } from "./services/FileService";
 import type { AnalysisResult, Config, FixResult } from "./types";
+import packageJson from "../package.json" with { type: "json" };
 
 const subcommandNames = ["fix", "analyze", "agents"];
 
@@ -31,7 +32,7 @@ const program = new Command();
 program
 	.name("stepdown-rule")
 	.description("TypeScript AST analyzer that enforces the stepdown rule for function organization")
-	.version("0.1.0");
+	.version(packageJson.version);
 
 const analyzeCommand = new Command();
 analyzeCommand
