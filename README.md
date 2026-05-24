@@ -83,6 +83,16 @@ stepdown-rule analyze --rules stepdown,nested
 stepdown-rule analyze --ignore "test/**/*" "generated/**/*"
 ```
 
+### Agents and automation
+
+For coding agents and CI parsers, use the `agents` subcommand (stable JSON envelope on stdout). See [SKILL.md](SKILL.md) for workflows, exit codes, and decision trees.
+
+```bash
+stepdown-rule agents analyze 'src/**/*.ts'
+stepdown-rule agents fix 'src/**/*.ts' --dry-run
+stepdown-rule agents schema rules
+```
+
 ### Programmatic
 
 ```typescript

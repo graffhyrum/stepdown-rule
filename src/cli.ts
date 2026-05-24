@@ -1,44 +1,31 @@
 #!/usr/bin/env bun
 import "./register-default-rules";
-import { Argument, Command, Option } from "commander";
+import { Command } from "commander";
 import picocolors from "picocolors";
-import { analyzeFiles } from "./analyzer";
-import { loadConfig } from "./config/loader";
-import { fixFiles } from "./fixer";
+import { registerAgentsCommand } from "./cli-agents";
+import { emitCliError } from "./cli-errors";
+import { sanitizeForJson } from "./cli-json";
+import {
+	configOption,
+	ignoreOption,
+	jsonOption,
+	patternsArgument,
+	rulesOption,
+	verboseOption,
+} from "./cli-options";
+import { fixResultsIndicateFailure } from "./cli-output";
+import { buildConfigFromCliSafe, runAnalyze, runFix } from "./cli-runners";
+import {
+	ExitConfig,
+	ExitInternal,
+	ExitNoFiles,
+	ExitUsage,
+	ExitViolationsOrFixErrors,
+} from "./exit-codes";
 import { FileService } from "./services/FileService";
 import type { AnalysisResult, Config, FixResult } from "./types";
 
-const ignoreOption = new Option(
-	"--ignore <patterns...>",
-	"Glob patterns to exclude from analysis (e.g. 'dist/**' '**/*.test.ts')",
-).default([]);
-
-const configOption = new Option(
-	"--config <file>",
-	"Path to a .stepdownrc.json config file; CLI flags override file values",
-).default(".stepdownrc.json");
-
-const jsonOption = new Option(
-	"--json",
-	"Emit machine-readable JSON instead of human-readable text; useful for editor integrations",
-).default(false);
-
-const verboseOption = new Option(
-	"-v, --verbose",
-	"Include circular-dependency warnings in output (implied by --json)",
-).default(false);
-
-const rulesOption = new Option(
-	"--rules <ids>",
-	"Comma-separated subset of rules to run: 'stepdown' (caller-before-callee at module scope), 'nested' (logic-before-nested-functions inside a body); omit to run all",
-);
-
-const subcommandNames = ["fix", "analyze"];
-
-const patternsArgument = new Argument(
-	"[patterns...]",
-	'File patterns to analyze (default: "src/**/*.ts")',
-).default(["src/**/*.ts"]);
+const subcommandNames = ["fix", "analyze", "agents"];
 
 const program = new Command();
 program
@@ -59,21 +46,10 @@ analyzeCommand
 	.addOption(verboseOption)
 	.addOption(rulesOption)
 	.action(async (patterns: string[], options) => {
-		const misplaced = patterns.find((p) => subcommandNames.includes(p));
-		if (misplaced) {
-			console.error(`Error: "${misplaced}" looks like a subcommand, not a file pattern.`);
-			console.error(`Usage: stepdown-rule ${misplaced} <patterns...>`);
-			process.exitCode = 2;
-			return;
-		}
-		const config = await createConfig(options);
-		const fileService = new FileService({ ignore: config.ignore });
-		if (await hasNoFiles(fileService, patterns)) return;
-		const results = await analyzeFiles(patterns, config, fileService);
-		outputAnalysisResults(results, config.json, options.verbose);
-		const counts = countAnalysisResults(results);
-		if (counts.violationCount > 0) {
-			process.exitCode = 1;
+		try {
+			await runHumanAnalyze(patterns, options);
+		} catch (error) {
+			handleUnexpectedError(error, options.json);
 		}
 	});
 
@@ -89,64 +65,141 @@ fixCommand
 	.addOption(jsonOption)
 	.addOption(rulesOption)
 	.action(async (patterns: string[], options) => {
-		const config = await createFixConfig(options);
-		const fileService = new FileService({ ignore: config.ignore });
-		if (await hasNoFiles(fileService, patterns)) return;
-		const fixResults = await fixFiles(patterns, config, fileService);
-		outputFixResults(fixResults, config.json);
+		try {
+			await runHumanFix(patterns, options);
+		} catch (error) {
+			handleUnexpectedError(error, options.json);
+		}
 	});
 
 program.addCommand(analyzeCommand, { isDefault: true });
 program.addCommand(fixCommand);
+registerAgentsCommand(program);
 
-program.parse();
+await program.parseAsync(process.argv);
 
-async function createFixConfig(options: {
-	ignore?: string[];
-	json?: boolean;
-	config?: string;
-	rules?: string;
-}): Promise<Config> {
-	const config = await createConfig(options);
-	return { ...config, fix: true };
+async function runHumanAnalyze(
+	patterns: string[],
+	options: {
+		ignore?: string[];
+		json?: boolean;
+		config?: string;
+		rules?: string;
+		verbose?: boolean;
+	},
+): Promise<void> {
+	const misplaced = patterns.find((p) => subcommandNames.includes(p));
+	if (misplaced) {
+		console.error(`Error: "${misplaced}" looks like a subcommand, not a file pattern.`);
+		console.error(`Usage: stepdown-rule ${misplaced} <patterns...>`);
+		process.exitCode = ExitUsage;
+		return;
+	}
+	const built = await buildConfigFromCliSafe(options);
+	if ("error" in built) {
+		emitCliError(built.error);
+		if (options.json) {
+			console.log(JSON.stringify([]));
+		}
+		process.exitCode = ExitConfig;
+		return;
+	}
+	const config = built.config;
+	const fileService = new FileService({ ignore: config.ignore });
+	const resolved = await resolveFilesOrReport(fileService, patterns, config.json);
+	if (!resolved) return;
+	const results = await runAnalyze(patterns, config, fileService, resolved.files);
+	const verbose = options.verbose || config.json;
+	const counts = countAnalysisResults(results);
+	outputAnalysisResults(results, config.json, verbose, counts);
+	if (counts.violationCount > 0) {
+		process.exitCode = ExitViolationsOrFixErrors;
+	}
 }
 
-async function createConfig(options: {
-	ignore?: string[];
-	json?: boolean;
-	config?: string;
-	rules?: string;
-}): Promise<Config> {
-	const fileConfig = await loadConfig(options.config);
-	const enabledRuleIds = options.rules
-		? options.rules
-				.split(",")
-				.map((s) => s.trim())
-				.filter(Boolean)
-		: undefined;
-	return {
-		ignore: options.ignore ?? fileConfig.ignore,
-		fix: false,
-		json: options.json ?? false,
-		enabledRuleIds,
-	};
+async function runHumanFix(
+	patterns: string[],
+	options: {
+		ignore?: string[];
+		json?: boolean;
+		config?: string;
+		rules?: string;
+	},
+): Promise<void> {
+	const misplaced = patterns.find((p) => subcommandNames.includes(p));
+	if (misplaced) {
+		console.error(`Error: "${misplaced}" looks like a subcommand, not a file pattern.`);
+		console.error(`Usage: stepdown-rule ${misplaced} <patterns...>`);
+		process.exitCode = ExitUsage;
+		return;
+	}
+	const built = await buildConfigFromCliSafe(options);
+	if ("error" in built) {
+		emitCliError(built.error);
+		if (options.json) {
+			console.log(JSON.stringify([]));
+		}
+		process.exitCode = ExitConfig;
+		return;
+	}
+	const config: Config = { ...built.config, fix: true };
+	const fileService = new FileService({ ignore: config.ignore });
+	const resolved = await resolveFilesOrReport(fileService, patterns, config.json);
+	if (!resolved) return;
+	const fixResults = await runFix(patterns, config, fileService, {
+		resolvedFiles: resolved.files,
+	});
+	outputFixResults(fixResults, config.json);
+	if (fixResultsIndicateFailure(fixResults)) {
+		process.exitCode = ExitViolationsOrFixErrors;
+	}
 }
 
-async function hasNoFiles(fileService: FileService, patterns: string[]): Promise<boolean> {
+function handleUnexpectedError(error: unknown, json: boolean | undefined): void {
+	const message = error instanceof Error ? error.message : String(error);
+	emitCliError({
+		code: "INTERNAL_ERROR",
+		message,
+		hint: "Report this issue with the command and file patterns used.",
+	});
+	if (json) {
+		console.log(JSON.stringify([]));
+	}
+	process.exitCode = ExitInternal;
+}
+
+async function resolveFilesOrReport(
+	fileService: FileService,
+	patterns: string[],
+	json: boolean,
+): Promise<{ files: string[] } | null> {
 	const files = await fileService.resolveFiles(patterns);
 	if (files.length === 0) {
-		console.log(picocolors.yellow(`No files matched: ${patterns.join(", ")}`));
-		return true;
+		const message = `No files matched: ${patterns.join(", ")}`;
+		emitCliError({
+			code: "NO_FILES",
+			message,
+			hint: "Quote globs for the shell, e.g. 'src/**/*.ts'.",
+		});
+		if (json) {
+			console.log(JSON.stringify([]));
+		}
+		process.exitCode = ExitNoFiles;
+		return null;
 	}
-	return false;
+	return { files };
 }
 
-function outputAnalysisResults(results: AnalysisResult[], json: boolean, verbose = false): void {
+function outputAnalysisResults(
+	results: AnalysisResult[],
+	json: boolean,
+	verbose: boolean,
+	counts: ReturnType<typeof countAnalysisResults>,
+): void {
 	if (json) {
 		console.log(JSON.stringify(sanitizeForJson(results), null, 2));
 		return;
 	}
-	const counts = countAnalysisResults(results);
 	printFormattedResults(results, verbose);
 	printAnalysisSummary(counts);
 }
@@ -270,26 +323,4 @@ function formatFixResult(result: FixResult): string {
 	}
 	const errors = result.errors.map((error) => picocolors.red(`  ${error}`)).join("\n");
 	return picocolors.red(`✗ Failed: ${result.file}`) + (errors ? `\n${errors}` : "");
-}
-function sanitizeForJson(results: AnalysisResult[]): AnalysisResult[] {
-	return results.map((r) => ({
-		...r,
-		violations: r.violations.map((v) => ({
-			...v,
-			function: { ...v.function, parentFunction: stripAnonymousScope(v.function.parentFunction) },
-			dependency: {
-				...v.dependency,
-				parentFunction: stripAnonymousScope(v.dependency.parentFunction),
-			},
-		})),
-		nestedFunctionViolations: r.nestedFunctionViolations.map((v) => ({
-			...v,
-			parent: { ...v.parent, parentFunction: stripAnonymousScope(v.parent.parentFunction) },
-			nested: { ...v.nested, parentFunction: stripAnonymousScope(v.nested.parentFunction) },
-		})),
-	}));
-}
-function stripAnonymousScope(parentFunction: string | null): string | null {
-	if (parentFunction?.includes("<anonymous>")) return null;
-	return parentFunction;
 }

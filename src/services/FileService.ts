@@ -1,6 +1,6 @@
 import { lstat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import { glob, type IgnoreLike } from "glob";
+import { glob } from "glob";
 import { minimatch } from "minimatch";
 import ts from "typescript";
 import type { FileServiceOptions, IFileService, ParsedFile } from "./types";
@@ -55,15 +55,8 @@ async function normalizePattern(pattern: string): Promise<string> {
 	return pattern;
 }
 
-function buildIgnore(): IgnoreLike {
-	const isDirIgnored = (p: { isNamed(n: string): boolean }): boolean =>
-		IGNORED_DIRS.some((d) => p.isNamed(d));
-	return {
-		childrenIgnored: isDirIgnored,
-		ignored(p) {
-			return isDirIgnored(p) || p.name.endsWith(".d.ts");
-		},
-	};
+function buildIgnore(): string[] {
+	return [...IGNORED_DIRS.map((d) => `**/${d}/**`), "**/*.d.ts"];
 }
 
 function applyUserIgnore(paths: string[], patterns: string[]): string[] {

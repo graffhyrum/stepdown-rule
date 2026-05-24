@@ -1,4 +1,8 @@
-import { FileConfigJsonSchema } from "../src/config/schema";
+import {
+	AgentsAnalyzeEnvelopeJsonSchema,
+	AgentsFixEnvelopeJsonSchema,
+	FileConfigJsonSchema,
+} from "../src/config/schema";
 
 await Bun.build({
 	entrypoints: ["src/index.ts", "src/cli.ts"],
@@ -14,3 +18,11 @@ await Bun.write("./dist/config/loader.js", await Bun.file("./src/config/loader.t
 // Use generated JSON schemas from ArkType
 await Bun.write("./dist/stepdown-schema.json", JSON.stringify(FileConfigJsonSchema, null, 2));
 await Bun.write("./stepdown-schema.json", JSON.stringify(FileConfigJsonSchema, null, 2));
+await Bun.write(
+	"./dist/agents-analyze-schema.json",
+	JSON.stringify(AgentsAnalyzeEnvelopeJsonSchema, null, 2),
+);
+await Bun.write(
+	"./dist/agents-fix-schema.json",
+	JSON.stringify(AgentsFixEnvelopeJsonSchema, null, 2),
+);

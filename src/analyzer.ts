@@ -26,9 +26,10 @@ export async function analyzeFiles(
 	patterns: string[],
 	config: Config,
 	fileService?: FileService,
+	resolvedFiles?: string[],
 ): Promise<AnalysisResult[]> {
 	const service = fileService ?? new FileService({ ignore: config.ignore });
-	const files = await service.resolveFiles(patterns);
+	const files = resolvedFiles ?? (await service.resolveFiles(patterns));
 	const enabledRules = getEnabled(config.enabledRuleIds);
 	const results: AnalysisResult[] = [];
 	const useRulePipeline = config.enabledRuleIds !== undefined;

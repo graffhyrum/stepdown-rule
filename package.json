@@ -22,7 +22,8 @@
 	},
 	"files": [
 		"dist",
-		"README.md"
+		"README.md",
+		"SKILL.md"
 	],
 	"type": "module",
 	"main": "./dist/index.js",

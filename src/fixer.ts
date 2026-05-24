@@ -28,21 +28,35 @@ export function reorderTopLevelOnly(
 	const newSourceFile = ts.factory.updateSourceFile(sourceFile, newStatements);
 	return defaultPrinter.printFile(newSourceFile);
 }
+export interface FixFilesOptions {
+	dryRun?: boolean;
+	resolvedFiles?: string[];
+}
+
 export async function fixFiles(
 	patterns: string[],
 	config: Config,
 	fileService?: FileService,
+	options: FixFilesOptions = {},
 ): Promise<FixResult[]> {
-	const { fixResults } = await runPipeline(patterns, { ...config, fix: true }, fileService);
+	const { fixResults } = await runPipeline(
+		patterns,
+		{ ...config, fix: true },
+		fileService,
+		options,
+	);
 	return fixResults;
 }
 export async function runPipeline(
 	patterns: string[],
 	config: Config,
 	fileService?: FileService,
+	pipelineOptions: FixFilesOptions = {},
 ): Promise<PipelineResult> {
+	const dryRun = pipelineOptions.dryRun ?? false;
+	const resolvedFiles = pipelineOptions.resolvedFiles;
 	const service = fileService ?? new FileService({ ignore: config.ignore });
-	const files = await service.resolveFiles(patterns);
+	const files = resolvedFiles ?? (await service.resolveFiles(patterns));
 	const enabledRules = getEnabled(config.enabledRuleIds);
 	const useRulePipeline = config.enabledRuleIds !== undefined;
 	const analysisResults: AnalysisResult[] = [];
@@ -54,6 +68,7 @@ export async function runPipeline(
 			service,
 			enabledRules,
 			useRulePipeline,
+			dryRun,
 		});
 		analysisResults.push(analysisResult);
 		if (config.fix && fixResult) {
@@ -68,11 +83,12 @@ async function processOneFile(params: {
 	service: FileService;
 	enabledRules: ViolationRule[];
 	useRulePipeline: boolean;
+	dryRun: boolean;
 }): Promise<{
 	analysisResult: AnalysisResult;
 	fixResult: FixResult | null;
 }> {
-	const { filePath, config, service, enabledRules, useRulePipeline } = params;
+	const { filePath, config, service, enabledRules, useRulePipeline, dryRun } = params;
 	const parsedFile = await service.parseFile(filePath);
 	const analysisResult = useRulePipeline
 		? analyzeWithRules(parsedFile, enabledRules)
@@ -81,19 +97,27 @@ async function processOneFile(params: {
 		return { analysisResult, fixResult: null };
 	}
 	if (useRulePipeline) {
-		const content = await service.readFile(filePath);
-		const result = fixFileWithRules({
-			filePath,
-			originalContent: content,
-			enabledRules,
-			service,
-		});
-		if (result.fixed) {
-			await service.writeFile(filePath, result.fixedContent);
+		try {
+			const content = await service.readFile(filePath);
+			const result = fixFileWithRules({
+				filePath,
+				originalContent: content,
+				enabledRules,
+				service,
+			});
+			if (result.fixed && !dryRun) {
+				await service.writeFile(filePath, result.fixedContent);
+			}
+			return { analysisResult, fixResult: result };
+		} catch (error) {
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			return {
+				analysisResult,
+				fixResult: createUnfixedResult(filePath, [errorMessage]),
+			};
 		}
-		return { analysisResult, fixResult: result };
 	}
-	const fixResult = await processAnalysisResult(analysisResult, config, service);
+	const fixResult = await processAnalysisResult(analysisResult, config, service, dryRun);
 	return { analysisResult, fixResult };
 }
 export function fixFileWithRules(params: {
@@ -126,6 +150,7 @@ async function processAnalysisResult(
 	result: AnalysisResult,
 	config: Config,
 	service: FileService,
+	dryRun: boolean,
 ): Promise<FixResult> {
 	if (result.violations.length === 0 && result.nestedFunctionViolations.length === 0) {
 		return createNoViolationsResult(result.file);
@@ -135,6 +160,7 @@ async function processAnalysisResult(
 		config,
 		service,
 		analysisResult: result,
+		dryRun,
 	});
 }
 async function fixFileWithErrorHandling(params: {
@@ -142,6 +168,7 @@ async function fixFileWithErrorHandling(params: {
 	config: Config;
 	service: FileService;
 	analysisResult: AnalysisResult;
+	dryRun: boolean;
 }): Promise<FixResult> {
 	try {
 		return await fixFile(params);
@@ -155,11 +182,12 @@ export async function fixFile(params: {
 	config: Config;
 	service: FileService;
 	analysisResult: AnalysisResult;
+	dryRun: boolean;
 }): Promise<FixResult> {
-	const { filePath, config, service, analysisResult } = params;
+	const { filePath, config, service, analysisResult, dryRun } = params;
 	const originalContent = await service.readFile(filePath);
 	const fixResult = fixParsedFile({ content: originalContent, filePath, config, analysisResult });
-	if (fixResult.fixed) {
+	if (fixResult.fixed && !dryRun) {
 		await service.writeFile(filePath, fixResult.fixedContent);
 	}
 	return fixResult;
