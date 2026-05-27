@@ -14,24 +14,46 @@ cd stepdown-rule
 # Install dependencies
 bun install
 
-# Build the package
+# Build the package (produces JS bundles + self-contained native CLI binary)
 bun run build
+```
 
-# Link globally (optional, for CLI access)
+### Making `stepdown-rule` available to all projects on your system (recommended)
+
+The build produces a standalone native executable at `dist/stepdown-rule` (100MB-ish, embeds Bun runtime + TypeScript + deps). This binary has **no external runtime dependency** on a `bun` command in PATH (unlike the old shebang approach).
+
+```bash
+# Recommended: symlink the binary into a directory on your PATH.
+# Create a personal bin dir if you don't have one:
+mkdir -p ~/bin
+export PATH="$HOME/bin:$PATH"   # add this to ~/.bashrc, ~/.zshrc, etc.
+
+# Durable link (survives source moves, bun updates, etc.)
+ln -sf "$(pwd)/dist/stepdown-rule" ~/bin/stepdown-rule
+
+# Now `stepdown-rule` works from ANY directory / project on the machine.
+stepdown-rule --version
+```
+
+Alternative (bun-centric, still supported):
+
+```bash
+# bun link registers the native binary in ~/.bun/bin (requires that dir on PATH)
 bun link
 ```
 
-### Local Usage in Another Project
+`bun link` (or `bun link @stepdown/analyzer` in a consumer) will continue to work and will expose the compiled native binary.
 
-After linking, use it in any project:
+### Local Usage in Another Project (programmatic API)
+
+For importing the analyzer in code (not the CLI), link the package:
 
 ```bash
-# Link the package in your project
 cd /path/to/your-project
 bun link @stepdown/analyzer
 ```
 
-Then import and use programmatically:
+Then:
 
 ```typescript
 import { analyzeFiles, fixFiles } from "@stepdown/analyzer";
@@ -44,7 +66,7 @@ const results = await analyzeFiles(["src/**/*.ts"], config, fileService);
 console.log(results);
 ```
 
-Or use the CLI:
+Or simply use the globally available CLI (no link needed once the binary is in your PATH):
 
 ```bash
 stepdown-rule "src/**/*.ts"

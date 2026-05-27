@@ -26,3 +26,14 @@ await Bun.write(
 	"./dist/agents-fix-schema.json",
 	JSON.stringify(AgentsFixEnvelopeJsonSchema, null, 2),
 );
+
+// Produce self-contained native executable for durable CLI distribution.
+// This binary embeds the Bun runtime + all deps, eliminating the need for
+// "#!/usr/bin/env bun" resolution and making the tool easily symlinked into
+// any PATH (~/bin, /usr/local/bin, etc.) for use across all projects.
+const compile = Bun.$`bun build --compile src/cli.ts --outfile ./dist/stepdown-rule`;
+const compileResult = await compile;
+if (compileResult.exitCode !== 0) {
+	console.error("Failed to compile native CLI binary");
+	process.exit(1);
+}

@@ -18,7 +18,7 @@
 		"url": "https://github.com/graffhyrum/stepdown-rule.git"
 	},
 	"bin": {
-		"stepdown-rule": "./dist/cli.js"
+		"stepdown-rule": "./dist/stepdown-rule"
 	},
 	"files": [
 		"dist",
