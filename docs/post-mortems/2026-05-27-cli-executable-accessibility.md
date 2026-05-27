@@ -94,7 +94,7 @@ Updating the tool on the machine reduces to: `cd stepdown-rule && git pull && bu
 - scripts/build.ts:14 (added compile step)
 - package.json:21 (bin pointer)
 - README.md (installation narrative)
-- New: documents/post-mortem-2026-05-27-cli-executable-accessibility.md (this file)
+- New: docs/post-mortems/2026-05-27-cli-executable-accessibility.md (this file)
 
 ## Timeline / Commands Run
 

@@ -77,6 +77,21 @@ Rules implement `ViolationRule` interface from `src/rule-context.ts`. Both rules
 
 `fixtures/` contains purpose-built `.ts` files that exercise specific violation patterns (circular deps, factory methods, nested functions, DI containers, etc.). Each fixture file has a header comment explaining the pattern it tests.
 
+## Documentation
+
+- **Post-mortems and retrospectives**: All live in `docs/post-mortems/`.
+  - Naming convention: `YYYY-MM-DD-slug.md` (date-first, descriptive, no `post-mortem-` prefix).
+  - Legacy `documents/` directory consolidated here (single source of truth for RCA artifacts).
+- **Agent / project instructions**: `CLAUDE.md` (canonical). `AGENTS.md` is a symlink → `CLAUDE.md` to prevent divergence.
+- **Other docs**: `docs/` (PRD.md, architecture, diagrams, post-mortems/).
+- **Consolidation rule**: When docs overlap or scatter:
+  1. Pick canonical location (prefer `docs/` or `CLAUDE.md`).
+  2. Move/rename content; update all references.
+  3. Use symlinks only for identical duplicate content.
+  4. Preserve `<!-- automation markers -->`.
+  5. Document the change in a post-mortem when significant.
+- See `docs/post-mortems/2026-03-02-file-consolidation.md` for the originating pattern and lessons.
+
 <!-- bv-agent-instructions-v1 -->
 
 ---
