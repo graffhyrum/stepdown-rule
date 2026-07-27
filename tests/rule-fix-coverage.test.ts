@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { fixFiles } from "../src/fixer";
+import "../src/register-default-rules";
 import type { Config } from "../src/types";
 import { analyzeCode, defaultConfig, withTempFile } from "./helpers";
 
