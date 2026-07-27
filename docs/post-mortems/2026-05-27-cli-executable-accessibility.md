@@ -62,11 +62,8 @@ The `stepdown-rule` CLI (bin name) was only "available" to other projects on the
 ## The Fix (Durable Solution Implemented)
 
 1. **scripts/build.ts** — added a `bun build --compile src/cli.ts --outfile ./dist/stepdown-rule` step (with error checking). Runs as part of the normal `bun run build`.
-2. **package.json** — changed `"bin": { "stepdown-rule": "./dist/stepdown-rule" }`. The native binary is now what `bun link`, local `file:` installs, and direct PATH symlinks all expose.
-3. **README.md** — rewrote the Installation section:
-   - Prominent "System-wide CLI (recommended)" subsection explaining the compiled binary, `~/bin` pattern, and `export PATH`.
-   - Clarified that `bun link` still works (and now delivers the native binary).
-   - Separated "programmatic API via link" from the now-trivial global CLI usage.
+2. **package.json** — briefly pointed `bin` at the native binary; **current state (2026-07)**: `"bin": { "stepdown-rule": "./dist/cli.js" }` again so `bun link` stays cross-platform JS. Native binary is for PATH / GitHub Releases.
+3. **README.md** — rewrote the Installation section for native PATH / link; later superseded by GitHub Release one-liners (see `2026-07-26-compile-size-audit.md` + release workflow).
 4. **Verification**:
    - Full rebuild succeeds and emits both artifacts.
    - Binary is ELF +x, ~100 MiB.
@@ -83,11 +80,11 @@ Updating the tool on the machine reduces to: `cd stepdown-rule && git pull && bu
 
 ## What Could Improve / Follow-ups ⚠️
 
-1. **Size** — 100 MiB is large for a dev tool (embeds full TS, arktype, commander, glob, etc.). Future work could investigate tree-shaking the compile or splitting the analyzer core from the CLI binary.
-2. **Cross-platform distribution** — `--compile` is platform-specific. If the tool is ever published, we would need a matrix (or keep publishing the JS + a postinstall compile script).
+1. **Size** — Partially addressed 2026-07-26: `--minify` → ~97.7 MiB (see `2026-07-26-compile-size-audit.md`). Floor is Bun runtime; further cuts need runtime/product changes.
+2. **Cross-platform distribution** — Done: `.github/workflows/release.yml` cross-compiles 5 targets on tag `v*`; `scripts/install.sh` / `install.ps1` one-liners.
 3. **rule-validator** — Still an un-declared global in jobAppTracker's fastvet. Either give it its own bin entry + document it, or convert the downstream reference to an explicit `bun run` invocation against a known path (or remove the coupling).
-4. **Keep cli.js shebang?** — The JS bundle still contains `#!/usr/bin/env bun`. If we ever want `node` fallback for the non-compiled path we would need a small launcher, but with the native binary as the blessed entry this is now irrelevant.
-5. **PATH best practices** — Consider adding a `bin/install-global` convenience script (or npm "postbuild" that prints the ln command) so the one-liner is even more obvious.
+4. **Keep cli.js shebang?** — The JS bundle still contains `#!/usr/bin/env bun`. Package `bin` remains `dist/cli.js` for `bun link`; Releases ship native binaries.
+5. **PATH best practices** — Done via install scripts on GitHub Releases.
 
 ## Key Artifacts Changed
 

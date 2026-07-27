@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Test
+        run: bun test
+
+      - name: Compile release binaries
+        run: bun run compile:release
+
+      - name: Show checksums
+        run: cat dist/release/SHA256SUMS
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            Standalone `stepdown-rule` binaries (Bun runtime embedded; no Bun install required at runtime).
+
+            **Install**
+
+            ```shell
+            curl -fsSL https://graffhyrum.github.io/stepdown-rule/install | bash
+            ```
+
+            ```powershell
+            irm https://graffhyrum.github.io/stepdown-rule/install.ps1 | iex
+            ```
+
+            See README for PATH setup and development installs.
+          files: |
+            dist/release/*
+            scripts/install.sh
+            scripts/install.ps1

@@ -4,56 +4,57 @@ A TypeScript AST analyzer that enforces the stepdown rule for function organizat
 
 ## Installation
 
-This is a local package. Clone and install it:
+### From GitHub Releases (recommended)
 
-```bash
-# Clone the repository
+Standalone binaries (~98 MiB, Bun runtime embedded — no Bun install required at runtime). Tagged releases (`v*`) publish linux/darwin (x64 + arm64) and windows-x64.
+
+**Unix (macOS / Linux):**
+
+```shell
+curl -fsSL https://graffhyrum.github.io/stepdown-rule/install | bash
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://graffhyrum.github.io/stepdown-rule/install.ps1 | iex
+```
+
+Pin a version with `VERSION=v0.2.0` (bash) or `$env:VERSION = 'v0.2.0'` (PowerShell). Installers pull release binaries and verify `SHA256SUMS`.
+
+> Short URLs are served via GitHub Pages (`pages` workflow). Repo Settings → Pages → Source: **GitHub Actions** (once).
+
+Then:
+
+```shell
+stepdown-rule --version
+stepdown-rule "src/**/*.ts"
+```
+
+### From source (development)
+
+```shell
 git clone https://github.com/graffhyrum/stepdown-rule.git
 cd stepdown-rule
-
-# Install dependencies
 bun install
-
-# Build the package (produces JS bundles + self-contained native CLI binary)
 bun run build
 ```
 
-### Making `stepdown-rule` available to all projects on your system (recommended)
+`bun link` registers the JS CLI (`dist/cli.js`) via Bun’s global bin dir:
 
-The build produces a standalone native executable at `dist/stepdown-rule` (100MB-ish, embeds Bun runtime + TypeScript + deps). This binary has **no external runtime dependency** on a `bun` command in PATH (unlike the old shebang approach).
-
-```bash
-# Recommended: symlink the binary into a directory on your PATH.
-# Create a personal bin dir if you don't have one:
-mkdir -p ~/bin
-export PATH="$HOME/bin:$PATH"   # add this to ~/.bashrc, ~/.zshrc, etc.
-
-# Durable link (survives source moves, bun updates, etc.)
-ln -sf "$(pwd)/dist/stepdown-rule" ~/bin/stepdown-rule
-
-# Now `stepdown-rule` works from ANY directory / project on the machine.
+```shell
+bun link
 stepdown-rule --version
 ```
 
-Alternative (bun-centric, still supported):
+Host-native binary after build (~98 MiB with `--minify`): `dist/stepdown-rule` (Unix) or `dist/stepdown-rule.exe` (Windows). Cross-compile all release targets: `bun run compile:release` → `dist/release/`.
 
-```bash
-# bun link registers the native binary in ~/.bun/bin (requires that dir on PATH)
-bun link
-```
+### Programmatic API (linked package)
 
-`bun link` (or `bun link @stepdown/analyzer` in a consumer) will continue to work and will expose the compiled native binary.
-
-### Local Usage in Another Project (programmatic API)
-
-For importing the analyzer in code (not the CLI), link the package:
-
-```bash
-cd /path/to/your-project
+```shell
+cd path/to/your-project
 bun link @stepdown/analyzer
 ```
-
-Then:
 
 ```typescript
 import { analyzeFiles, fixFiles } from "@stepdown/analyzer";
@@ -66,17 +67,11 @@ const results = await analyzeFiles(["src/**/*.ts"], config, fileService);
 console.log(results);
 ```
 
-Or simply use the globally available CLI (no link needed once the binary is in your PATH):
-
-```bash
-stepdown-rule "src/**/*.ts"
-```
-
 ## Usage
 
 ### CLI
 
-```bash
+```shell
 # Analyze default (src/**/*.ts)
 stepdown-rule
 
@@ -109,7 +104,7 @@ stepdown-rule analyze --ignore "test/**/*" "generated/**/*"
 
 For coding agents and CI parsers, use the `agents` subcommand (stable JSON envelope on stdout). See [SKILL.md](SKILL.md) for workflows, exit codes, and decision trees.
 
-```bash
+```shell
 stepdown-rule agents analyze 'src/**/*.ts'
 stepdown-rule agents fix 'src/**/*.ts' --dry-run
 stepdown-rule agents schema rules
@@ -174,7 +169,7 @@ The analyzer reports **only actionable violations** - violations that can be fix
 
 Circular dependencies are always detected and reported separately. To understand what's creating cycles in your code:
 
-```bash
+```shell
 stepdown-rule src/analyzer.ts
 # Output shows both violations (fixable) and circular dependencies (architectural)
 ```
@@ -209,7 +204,7 @@ Create a `.stepdownrc.json` file (optional):
 
 ## Development
 
-```bash
+```shell
 bun install
 bun run dev      # Run CLI from source
 bun run build    # Build
