@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code and agents working on this repository.
+This file provides guidance to agents working on this repository.
 
 ## Project Overview
 
@@ -43,7 +43,7 @@ bun run fix              # oxlint --fix + oxfmt --write
 bun run vet              # full pipeline: build → typecheck → fix → custom-hooks → test:coverage
 ```
 
-Native compile output: `dist/stepdown-rule` (Unix) or `dist/stepdown-rule.exe` (Windows), minified (~98 MiB). Package `bin` is `dist/cli.js` (`bun link`). Push tag `v*` → `.github/workflows/release.yml` publishes GitHub Release binaries + `install.sh` / `install.ps1`. After editing this file run `bun run sync-agents`.
+Native compile output: `dist/stepdown-rule` (Unix) or `dist/stepdown-rule.exe` (Windows), minified (~98 MiB). Package `bin` is `dist/cli.js` (`bun link`). Push tag `v*` → `.github/workflows/release.yml` publishes GitHub Release binaries + `install.sh` / `install.ps1`.
 
 ## Architecture
 
@@ -86,15 +86,14 @@ Rules implement `ViolationRule` interface from `src/rule-context.ts`. Both rules
 - **Post-mortems and retrospectives**: All live in `docs/post-mortems/`.
   - Naming convention: `YYYY-MM-DD-slug.md` (date-first, descriptive, no `post-mortem-` prefix).
   - Legacy `documents/` directory consolidated here (single source of truth for RCA artifacts).
-- **Agent / project instructions**: `CLAUDE.md` (canonical). `AGENTS.md` is a synced copy (not a symlink) so Windows checkouts with `core.symlinks=false` still get full instructions. Run `bun run sync-agents` after editing `CLAUDE.md` (`custom-hooks` runs it too).
+- **Agent / project instructions**: `AGENTS.md` (sole canonical file; no `CLAUDE.md` / sync copy).
 - **Other docs**: `docs/` (PRD.md, architecture, diagrams, post-mortems/).
 - **Consolidation rule**: When docs overlap or scatter:
-  1. Pick canonical location (prefer `docs/` or `CLAUDE.md`).
+  1. Pick canonical location (prefer `docs/` or `AGENTS.md`).
   2. Move/rename content; update all references.
-  3. Prefer synced copies over git symlinks for agent-facing files (Windows-safe).
+  3. Prefer regular files over git symlinks for agent-facing docs (Windows-safe; avoids Linux checkout failures).
   4. Preserve `<!-- automation markers -->`.
   5. Document the change in a post-mortem when significant.
-- See `docs/post-mortems/2026-03-02-file-consolidation.md` for the originating pattern and lessons.
 
 <!-- bv-agent-instructions-v1 -->
 

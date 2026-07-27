@@ -33,7 +33,6 @@
 		"build:declaration": "bunx tsgo --emitDeclarationOnly --project tsconfig.types.json",
 		"postbuild": "bun run --shell bun remove-buildinfo",
 		"remove-buildinfo": "bun scripts/remove-buildinfo.ts",
-		"sync-agents": "bun scripts/sync-agents.ts",
 		"compile:release": "bun scripts/compile-release.ts",
 		"compile:bench": "bun scripts/compile-size-bench.ts",
 		"dev": "bun run src/cli.ts",
@@ -42,7 +41,7 @@
 		"typecheck": "bunx tsgo --noEmit",
 		"check": "bunx oxlint . && bunx oxfmt --check .",
 		"fix": "bunx oxlint --fix . && bunx oxfmt --write .",
-		"custom-hooks": "bun run sync-agents && bun run scripts/rule-validator.ts && bun run dist/cli.js analyze",
+		"custom-hooks": "bun run scripts/rule-validator.ts && bun run dist/cli.js fix",
 		"fastvet": "bun run build && bun typecheck && bun fix && bun run custom-hooks  && bun run test:coverage",
 		"vet": "bun fastvet"
 	},
