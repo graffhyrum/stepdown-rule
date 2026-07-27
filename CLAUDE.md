@@ -28,18 +28,22 @@ When dispatching subagents for bugfixes or targeted changes, include explicit sc
 
 ## Commands
 
-```bash
+```shell
 bun install              # install dependencies
 bun test                 # run all tests
 bun test tests/fixer.test.ts              # run a single test file
 bun test --test-name-pattern "reorders"   # run tests matching pattern
-bun run build            # build (scripts/build.ts + tsc declarations)
+bun run build            # build (scripts/build.ts + tsc declarations + host native CLI)
+bun run compile:release  # cross-compile 5 release targets → dist/release/
+bun run compile:bench    # size audit of --compile flag variants
 bun run dev              # run CLI from source
 bun run typecheck        # tsc --noEmit
 bun run check            # oxlint + oxfmt --check
 bun run fix              # oxlint --fix + oxfmt --write
 bun run vet              # full pipeline: build → typecheck → fix → custom-hooks → test:coverage
 ```
+
+Native compile output: `dist/stepdown-rule` (Unix) or `dist/stepdown-rule.exe` (Windows), minified (~98 MiB). Package `bin` is `dist/cli.js` (`bun link`). Push tag `v*` → `.github/workflows/release.yml` publishes GitHub Release binaries + `install.sh` / `install.ps1`. After editing this file run `bun run sync-agents`.
 
 ## Architecture
 
@@ -82,12 +86,12 @@ Rules implement `ViolationRule` interface from `src/rule-context.ts`. Both rules
 - **Post-mortems and retrospectives**: All live in `docs/post-mortems/`.
   - Naming convention: `YYYY-MM-DD-slug.md` (date-first, descriptive, no `post-mortem-` prefix).
   - Legacy `documents/` directory consolidated here (single source of truth for RCA artifacts).
-- **Agent / project instructions**: `CLAUDE.md` (canonical). `AGENTS.md` is a symlink → `CLAUDE.md` to prevent divergence.
+- **Agent / project instructions**: `CLAUDE.md` (canonical). `AGENTS.md` is a synced copy (not a symlink) so Windows checkouts with `core.symlinks=false` still get full instructions. Run `bun run sync-agents` after editing `CLAUDE.md` (`custom-hooks` runs it too).
 - **Other docs**: `docs/` (PRD.md, architecture, diagrams, post-mortems/).
 - **Consolidation rule**: When docs overlap or scatter:
   1. Pick canonical location (prefer `docs/` or `CLAUDE.md`).
   2. Move/rename content; update all references.
-  3. Use symlinks only for identical duplicate content.
+  3. Prefer synced copies over git symlinks for agent-facing files (Windows-safe).
   4. Preserve `<!-- automation markers -->`.
   5. Document the change in a post-mortem when significant.
 - See `docs/post-mortems/2026-03-02-file-consolidation.md` for the originating pattern and lessons.
@@ -102,7 +106,7 @@ This project uses [beads_viewer](https://github.com/Dicklesworthstone/beads_view
 
 ### Essential Commands
 
-```bash
+```shell
 # View issues (launches TUI - avoid in automated sessions)
 bv
 
@@ -136,7 +140,7 @@ bd sync               # Commit and push changes
 
 **Before ending any session, run this checklist:**
 
-```bash
+```shell
 git status              # Check what changed
 git add <files>         # Stage code changes
 bd sync                 # Commit beads changes
@@ -158,7 +162,7 @@ git push                # Push to remote
 ## Agent Toolkit
 
 ### bv — Bead Triage (read-only, use robot flags only)
-```bash
+```shell
 bv --robot-triage --format toon | toon -d   # Full triage: priority, health, quick wins
 bv --robot-next --format toon | toon -d     # Single top pick
 bv --robot-insights --format toon | toon -d # Graph metrics + cycle detection
@@ -167,7 +171,7 @@ bv --robot-plan --format toon | toon -d     # Parallel execution tracks
 Never run bare `bv` — it opens an interactive TUI that blocks the session.
 
 ### bd — Beads Issue Tracker
-```bash
+```shell
 bd ready --json                             # Next unblocked issue
 bd create "<title>" --type bug --priority p0 --label security --json
 bd update <id> --status in_progress --json
@@ -180,7 +184,7 @@ Pipe any `--robot-*` output through `toon -d` to decode token-efficient format b
 Add `--format toon` to bv commands; pipe to `toon -d` before passing to tools.
 
 ### ms — Skill Discovery
-```bash
+```shell
 ms suggest --machine --cwd .               # Load context-relevant skills before starting
 ms search "<query>" -m                     # Find skills by intent
 ms load "<skill-name>"                     # Load a skill
@@ -188,21 +192,21 @@ ms load "<skill-name>"                     # Load a skill
 Always run `ms suggest` at session start before implementing anything novel.
 
 ### cass — Session Search
-```bash
+```shell
 cass search "<query>" --json --limit 5     # Find prior solutions
 cass status                                # Index health check
 ```
 Search before implementing to surface prior work from past sessions.
 
 ### gh — GitHub CLI
-```bash
+```shell
 gh issue list --state open --json number,title,labels
 gh pr create --title "<title>" --body "<body>"
 gh pr view <number> --json state,reviews,checks
 ```
 
 ### ubs — Security Scanner
-```bash
+```shell
 ubs --format=json --diff .                 # Scan only changed files (fast, for pre-commit)
 ubs --format=json .                        # Full scan
 ubs --staged                               # Scan staged files only

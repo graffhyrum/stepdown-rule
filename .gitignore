@@ -45,3 +45,5 @@ telemetry-id
 # Dolt database
 .dolt/
 *.db
+# br doctor per-run artifacts
+.doctor/

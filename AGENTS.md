@@ -1,1 +1,214 @@
-CLAUDE.md
+# CLAUDE.md
+
+This file provides guidance to Claude Code and agents working on this repository.
+
+## Project Overview
+
+`@stepdown/analyzer` — A TypeScript AST analyzer and fixer that enforces the stepdown rule: callers appear ABOVE callees (high-level first, low-level last). Also detects nested function declarations that appear before logic within a scope.
+
+## Project Conventions
+
+- Each analysis (violation type) must have a fix implementation. Add fixture in `src/violation-coverage.ts` and ensure fix reduces violations.
+- Use bun instead of node.
+    - `npm run` > `bun run`
+    - `npx` > `bunx`
+- No Barrel Files. Import directly from source files.
+    - ❌ DON'T: `import { foo } from "./index"` or `import { foo } from "./folder"`
+    - ✅ DO: `import { foo } from "./folder/foo"`
+- Use Mermaid for diagrams.
+- Do not fix unused functions or parameters with underscores — delete them.
+- Commit pre-existing uncommitted changes before starting new work to avoid push-hook conflicts.
+
+## Subagent Scope Boundaries
+
+When dispatching subagents for bugfixes or targeted changes, include explicit scope constraints:
+- **List exact functions** that may be modified (e.g., "Only modify `dfsDetectCycle` in `src/analyzer.ts`")
+- **Prohibit scope expansion**: "DO NOT modify any other functions. DO NOT add or remove imports."
+- **Cherry-pick over merge**: Review worktree diffs before applying; apply only in-scope changes manually
+
+## Commands
+
+```shell
+bun install              # install dependencies
+bun test                 # run all tests
+bun test tests/fixer.test.ts              # run a single test file
+bun test --test-name-pattern "reorders"   # run tests matching pattern
+bun run build            # build (scripts/build.ts + tsc declarations + host native CLI)
+bun run compile:release  # cross-compile 5 release targets → dist/release/
+bun run compile:bench    # size audit of --compile flag variants
+bun run dev              # run CLI from source
+bun run typecheck        # tsc --noEmit
+bun run check            # oxlint + oxfmt --check
+bun run fix              # oxlint --fix + oxfmt --write
+bun run vet              # full pipeline: build → typecheck → fix → custom-hooks → test:coverage
+```
+
+Native compile output: `dist/stepdown-rule` (Unix) or `dist/stepdown-rule.exe` (Windows), minified (~98 MiB). Package `bin` is `dist/cli.js` (`bun link`). Push tag `v*` → `.github/workflows/release.yml` publishes GitHub Release binaries + `install.sh` / `install.ps1`. After editing this file run `bun run sync-agents`.
+
+## Architecture
+
+### Two-rule system
+The analyzer has two violation rules registered via a plugin registry (`src/registry.ts`):
+- **stepdown** (`src/stepdown-rule.ts`): callers must appear before callees at module scope
+- **nested** (`src/nested-rule.ts`): within a function body, logic comes before nested function declarations
+
+Rules implement `ViolationRule` interface from `src/rule-context.ts`. Both rules delegate to functions in `src/analyzer.ts`.
+
+### Analysis → Fix pipeline
+1. `FileService` (`src/services/FileService.ts`) resolves globs, reads files, parses with TypeScript compiler API
+2. `buildRuleContext` (`src/analyzer.ts`) builds call graphs and function metadata into a `RuleContext`
+3. Rules run against the `RuleContext` to produce `Violation[]`
+4. `analyzeParsedFile` assembles `AnalysisResult` (violations + circular deps)
+5. Fixer (`src/fixer.ts`) uses topological sort via `src/graph-algorithms.ts` to reorder functions
+
+### Shared AST infrastructure
+- `src/ast-graph-builder.ts` — call graph construction, dependency extraction
+- `src/ast-node-visitors.ts` — node categorization (imports, exports, functions, other)
+- `src/ast-utils.ts` — predicate helpers for AST nodes
+- `src/graph-algorithms.ts` — topological sort, cycle detection
+
+### CLI
+`src/cli.ts` uses CommanderJS with two subcommands: `analyze` (default) and `fix`.
+
+**Commander.js help design idioms** (apply when modifying `src/cli.ts`):
+- The idiomatic discoverability path is `stepdown-rule help <subcommand>` / `subcommand --help`. Do not duplicate subcommand option lists into the root help.
+- `addHelpText("after", ...)` is for non-duplicating additions only: example invocations, doc links, env-var references.
+- `showGlobalOptions: true` in `configureHelp` propagates shared parent options *down* into subcommand help — useful for flags added to `program` directly.
+- `configureHelp({ subcommandTerm: (cmd) => cmd.name() })` narrows the Commands table to name-only when usage strings are too wide.
+- **When writing a plan that changes help output, include a rendered mock of `--help` and explicitly note any content duplication.**
+
+## Test Fixtures
+
+`fixtures/` contains purpose-built `.ts` files that exercise specific violation patterns (circular deps, factory methods, nested functions, DI containers, etc.). Each fixture file has a header comment explaining the pattern it tests.
+
+## Documentation
+
+- **Post-mortems and retrospectives**: All live in `docs/post-mortems/`.
+  - Naming convention: `YYYY-MM-DD-slug.md` (date-first, descriptive, no `post-mortem-` prefix).
+  - Legacy `documents/` directory consolidated here (single source of truth for RCA artifacts).
+- **Agent / project instructions**: `CLAUDE.md` (canonical). `AGENTS.md` is a synced copy (not a symlink) so Windows checkouts with `core.symlinks=false` still get full instructions. Run `bun run sync-agents` after editing `CLAUDE.md` (`custom-hooks` runs it too).
+- **Other docs**: `docs/` (PRD.md, architecture, diagrams, post-mortems/).
+- **Consolidation rule**: When docs overlap or scatter:
+  1. Pick canonical location (prefer `docs/` or `CLAUDE.md`).
+  2. Move/rename content; update all references.
+  3. Prefer synced copies over git symlinks for agent-facing files (Windows-safe).
+  4. Preserve `<!-- automation markers -->`.
+  5. Document the change in a post-mortem when significant.
+- See `docs/post-mortems/2026-03-02-file-consolidation.md` for the originating pattern and lessons.
+
+<!-- bv-agent-instructions-v1 -->
+
+---
+
+## Beads Workflow Integration
+
+This project uses [beads_viewer](https://github.com/Dicklesworthstone/beads_viewer) for issue tracking. Issues are stored in `.beads/` and tracked in git.
+
+### Essential Commands
+
+```shell
+# View issues (launches TUI - avoid in automated sessions)
+bv
+
+# CLI commands for agents (use these instead)
+bd ready              # Show issues ready to work (no blockers)
+bd list --status=open # All open issues
+bd show <id>          # Full issue details with dependencies
+bd create --title="..." --type=task --priority=2
+bd update <id> --status=in_progress
+bd close <id> --reason="Completed"
+bd close <id1> <id2>  # Close multiple issues at once
+bd sync               # Commit and push changes
+```
+
+### Workflow Pattern
+
+1. **Start**: Run `bd ready` to find actionable work
+2. **Claim**: Use `bd update <id> --status=in_progress`
+3. **Work**: Implement the task
+4. **Complete**: Use `bd close <id>`
+5. **Sync**: Always run `bd sync` at session end
+
+### Key Concepts
+
+- **Dependencies**: Issues can block other issues. `bd ready` shows only unblocked work.
+- **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers, not words)
+- **Types**: task, bug, feature, epic, question, docs
+- **Blocking**: `bd dep add <issue> <depends-on>` to add dependencies
+
+### Session Protocol
+
+**Before ending any session, run this checklist:**
+
+```shell
+git status              # Check what changed
+git add <files>         # Stage code changes
+bd sync                 # Commit beads changes
+git commit -m "..."     # Commit code
+bd sync                 # Commit any new beads changes
+git push                # Push to remote
+```
+
+### Best Practices
+
+- Check `bd ready` at session start to find available work
+- Update status as you work (in_progress → closed)
+- Create new issues with `bd create` when you discover tasks
+- Use descriptive titles and set appropriate priority/type
+- Always `bd sync` before ending session
+
+<!-- end-bv-agent-instructions -->
+
+## Agent Toolkit
+
+### bv — Bead Triage (read-only, use robot flags only)
+```shell
+bv --robot-triage --format toon | toon -d   # Full triage: priority, health, quick wins
+bv --robot-next --format toon | toon -d     # Single top pick
+bv --robot-insights --format toon | toon -d # Graph metrics + cycle detection
+bv --robot-plan --format toon | toon -d     # Parallel execution tracks
+```
+Never run bare `bv` — it opens an interactive TUI that blocks the session.
+
+### bd — Beads Issue Tracker
+```shell
+bd ready --json                             # Next unblocked issue
+bd create "<title>" --type bug --priority p0 --label security --json
+bd update <id> --status in_progress --json
+bd close <id> --reason "Completed" --json
+bd list --json
+```
+
+### toon — Token-Optimized Output
+Pipe any `--robot-*` output through `toon -d` to decode token-efficient format back to JSON.
+Add `--format toon` to bv commands; pipe to `toon -d` before passing to tools.
+
+### ms — Skill Discovery
+```shell
+ms suggest --machine --cwd .               # Load context-relevant skills before starting
+ms search "<query>" -m                     # Find skills by intent
+ms load "<skill-name>"                     # Load a skill
+```
+Always run `ms suggest` at session start before implementing anything novel.
+
+### cass — Session Search
+```shell
+cass search "<query>" --json --limit 5     # Find prior solutions
+cass status                                # Index health check
+```
+Search before implementing to surface prior work from past sessions.
+
+### gh — GitHub CLI
+```shell
+gh issue list --state open --json number,title,labels
+gh pr create --title "<title>" --body "<body>"
+gh pr view <number> --json state,reviews,checks
+```
+
+### ubs — Security Scanner
+```shell
+ubs --format=json --diff .                 # Scan only changed files (fast, for pre-commit)
+ubs --format=json .                        # Full scan
+ubs --staged                               # Scan staged files only
+```
+Run `ubs --diff` before every commit. Convert critical/high findings to P0/P1 beads.

@@ -72,9 +72,10 @@ Shared on `agents analyze` and `agents fix`:
 
 ## Examples
 
-```bash
+```shell
 stepdown-rule agents analyze 'src/**/*.ts'
 stepdown-rule agents fix 'src/**/*.ts' --dry-run
 stepdown-rule agents fix 'src/**/*.ts'
-stepdown-rule agents schema rules | jq '.[].id'
+stepdown-rule agents schema rules
+# Rule IDs are in the JSON array on stdout (optional: pipe to jq if installed)
 ```
