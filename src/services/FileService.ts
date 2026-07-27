@@ -16,10 +16,13 @@ export class FileService implements IFileService {
 
 	async resolveFiles(patterns: string[]): Promise<string[]> {
 		const expanded = await Promise.all(patterns.map(normalizePattern));
-		const ignore = buildIgnore();
-		const results = await Promise.all(expanded.map((p) => glob(p, { ignore })));
-		const unique = [...new Set(results.flat())].sort((a, b) => a.localeCompare(b));
-		return applyUserIgnore(unique, this.ignore);
+		const builtInIgnore = buildIgnore();
+		// glob ignore skips trees when patterns are relative; post-filter covers absolute Windows paths.
+		const results = await Promise.all(
+			expanded.map((p) => glob(p, { ignore: builtInIgnore, windowsPathsNoEscape: true })),
+		);
+		const unique = [...new Set(results.flat().map(toPosixPath))].sort((a, b) => a.localeCompare(b));
+		return applyIgnore(unique, [...builtInIgnore, ...this.ignore]);
 	}
 
 	async parseFile(filePath: string): Promise<ParsedFile> {
@@ -42,26 +45,39 @@ export class FileService implements IFileService {
 	}
 }
 
+function applyIgnore(paths: string[], patterns: string[]): string[] {
+	if (patterns.length === 0) return paths;
+	const normalized = patterns.map(toPosixPath);
+	return paths.filter((p) => !normalized.some((pat) => minimatch(p, pat)));
+}
+
 async function normalizePattern(pattern: string): Promise<string> {
 	try {
 		const stat = await lstat(pattern);
 		if (stat.isDirectory()) {
-			const trailing = pattern.endsWith("/") ? "" : "/";
-			return `${pattern}${trailing}**/*.ts`;
+			const normalized = toPosixPath(pattern);
+			const trailing = normalized.endsWith("/") ? "" : "/";
+			return `${normalized}${trailing}**/*.ts`;
 		}
-	} catch {
-		/* not a filesystem path — use as glob */
+	} catch (error) {
+		if (!isEnoent(error)) throw error;
 	}
-	return pattern;
+	return toPosixPath(pattern);
+}
+
+function isEnoent(error: unknown): boolean {
+	if (typeof error !== "object" || error === null || !("code" in error)) {
+		return false;
+	}
+	return error.code === "ENOENT";
+}
+
+function toPosixPath(p: string): string {
+	return p.replaceAll("\\", "/");
 }
 
 function buildIgnore(): string[] {
 	return [...IGNORED_DIRS.map((d) => `**/${d}/**`), "**/*.d.ts"];
-}
-
-function applyUserIgnore(paths: string[], patterns: string[]): string[] {
-	if (patterns.length === 0) return paths;
-	return paths.filter((p) => !patterns.some((pat) => minimatch(p, pat)));
 }
 
 function assertWriteSafe(filePath: string): void {

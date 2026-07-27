@@ -119,7 +119,7 @@ test("77q: ff-elysia convergence when available", async () => {
 		mkdirSync(tmpDir, { recursive: true });
 		cpSync(join(ffPath, "src"), join(tmpDir, "src"), { recursive: true });
 
-		const patterns = [join(tmpDir, "src", "**", "*.ts")];
+		const patterns = [`${tmpDir.replaceAll("\\", "/")}/src/**/*.ts`];
 		let prevViolations = Number.POSITIVE_INFINITY;
 
 		for (let i = 0; i < 15; i++) {

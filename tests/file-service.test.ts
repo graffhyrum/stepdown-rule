@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FileService } from "../src/services/FileService";
 
+function toPosixPath(p: string): string {
+	return p.replaceAll("\\", "/");
+}
+
 let tmpDir: string;
 
 beforeEach(() => {
@@ -24,7 +28,7 @@ describe("FileService.resolveFiles", () => {
 		const service = new FileService();
 		const files = await service.resolveFiles([tmpDir]);
 
-		expect(files).toEqual([join(tmpDir, "app.ts")]);
+		expect(files).toEqual([toPosixPath(join(tmpDir, "app.ts"))]);
 	});
 
 	test("relative path input still excludes node_modules", async () => {
@@ -51,7 +55,7 @@ describe("FileService.resolveFiles", () => {
 		const service = new FileService({ ignore: ["**/skip.ts"] });
 		const files = await service.resolveFiles([tmpDir]);
 
-		expect(files).toEqual([join(tmpDir, "keep.ts")]);
+		expect(files).toEqual([toPosixPath(join(tmpDir, "keep.ts"))]);
 	});
 });
 
