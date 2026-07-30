@@ -38,7 +38,7 @@
 		"dev": "bun run src/cli.ts",
 		"test": "bun test",
 		"test:coverage": "AGENT=1 bun test --coverage ",
-		"typecheck": "bunx tsgo --noEmit",
+		"typecheck": "bunx tsgo --noEmit -p tsconfig.check.json",
 		"check": "bunx oxlint . && bunx oxfmt --check .",
 		"fix": "bunx oxlint --fix . && bunx oxfmt --write .",
 		"custom-hooks": "bun run scripts/rule-validator.ts && bun run dist/cli.js fix",
