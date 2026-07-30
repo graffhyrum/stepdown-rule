@@ -1,6 +1,13 @@
-import { expect, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
 import { analyzeFiles } from "../src/analyzer";
+import { registerDefaultRules } from "../src/register-default-rules";
+import { clear } from "../src/registry";
 import { analyzeCode, defaultConfig } from "./helpers";
+
+beforeAll(() => {
+	clear();
+	registerDefaultRules();
+});
 
 // --- Core behavior ---
 

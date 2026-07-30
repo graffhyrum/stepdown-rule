@@ -1,6 +1,6 @@
-import "../src/register-default-rules";
-import { expect, test } from "bun:test";
-import { list } from "../src/registry";
+import { beforeAll, expect, test } from "bun:test";
+import { registerDefaultRules } from "../src/register-default-rules";
+import { clear, list } from "../src/registry";
 import {
 	ACTIONABLE_VIOLATION_TYPES,
 	getViolationFixture,
@@ -8,7 +8,12 @@ import {
 } from "../src/violation-coverage";
 import { assertFixReducesViolations, defaultConfig } from "./helpers";
 
-test("vic: pipeline uses registry; each actionable rule has fix coverage", async () => {
+beforeAll(() => {
+	clear();
+	registerDefaultRules();
+});
+
+test("vic: pipeline uses registry; each actionable rule has fix coverage", () => {
 	const ruleIds = new Set(list().map((r) => r.id));
 	const enabledRuleIds = [...ACTIONABLE_VIOLATION_TYPES];
 	for (const id of enabledRuleIds) {
@@ -17,6 +22,6 @@ test("vic: pipeline uses registry; each actionable rule has fix coverage", async
 	for (const violationType of ACTIONABLE_VIOLATION_TYPES) {
 		const fixture = getViolationFixture(violationType as ViolationType);
 		const config = { ...defaultConfig, enabledRuleIds };
-		await assertFixReducesViolations(fixture, config, violationType);
+		assertFixReducesViolations(fixture, config, violationType);
 	}
 });

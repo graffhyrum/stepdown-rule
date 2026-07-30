@@ -1,0 +1,157 @@
+[
+  {
+    "file": "fixtures/stepdown-violation.ts",
+    "violations": [
+      {
+        "kind": "stepdown",
+        "file": "fixtures/stepdown-violation.ts",
+        "function": {
+          "name": "createUser",
+          "kind": "declaration",
+          "position": {
+            "line": 11,
+            "column": 1,
+            "start": 271,
+            "end": 404
+          },
+          "isExported": false,
+          "parentFunction": null
+        },
+        "dependency": {
+          "name": "hashPassword",
+          "kind": "declaration",
+          "position": {
+            "line": 3,
+            "column": 1,
+            "start": 86,
+            "end": 167
+          },
+          "isExported": false,
+          "parentFunction": null
+        },
+        "message": "Stepdown violation: createUser calls hashPassword which appears above it",
+        "callSite": {
+          "line": 12,
+          "column": 17
+        }
+      },
+      {
+        "kind": "stepdown",
+        "file": "fixtures/stepdown-violation.ts",
+        "function": {
+          "name": "_main",
+          "kind": "declaration",
+          "position": {
+            "line": 16,
+            "column": 1,
+            "start": 406,
+            "end": 644
+          },
+          "isExported": false,
+          "parentFunction": null
+        },
+        "dependency": {
+          "name": "createUser",
+          "kind": "declaration",
+          "position": {
+            "line": 11,
+            "column": 1,
+            "start": 271,
+            "end": 404
+          },
+          "isExported": false,
+          "parentFunction": null
+        },
+        "message": "Stepdown violation: _main calls createUser which appears above it",
+        "callSite": {
+          "line": 18,
+          "column": 15
+        }
+      },
+      {
+        "kind": "stepdown",
+        "file": "fixtures/stepdown-violation.ts",
+        "function": {
+          "name": "_main",
+          "kind": "declaration",
+          "position": {
+            "line": 16,
+            "column": 1,
+            "start": 406,
+            "end": 644
+          },
+          "isExported": false,
+          "parentFunction": null
+        },
+        "dependency": {
+          "name": "validateEmail",
+          "kind": "declaration",
+          "position": {
+            "line": 7,
+            "column": 1,
+            "start": 169,
+            "end": 269
+          },
+          "isExported": false,
+          "parentFunction": null
+        },
+        "message": "Stepdown violation: _main calls validateEmail which appears above it",
+        "callSite": {
+          "line": 19,
+          "column": 18
+        }
+      },
+      {
+        "kind": "stepdown",
+        "file": "fixtures/stepdown-violation.ts",
+        "function": {
+          "name": "_processData",
+          "kind": "arrow-function",
+          "position": {
+            "line": 31,
+            "column": 1,
+            "start": 767,
+            "end": 875
+          },
+          "isExported": false,
+          "parentFunction": null
+        },
+        "dependency": {
+          "name": "cleanData",
+          "kind": "arrow-function",
+          "position": {
+            "line": 27,
+            "column": 1,
+            "start": 696,
+            "end": 765
+          },
+          "isExported": false,
+          "parentFunction": null
+        },
+        "message": "Stepdown violation: _processData calls cleanData which appears above it",
+        "callSite": {
+          "line": 32,
+          "column": 18
+        }
+      }
+    ],
+    "nestedFunctionViolations": [],
+    "circularDependencies": [],
+    "totalFunctions": 6,
+    "dependencyGraph": {
+      "hashPassword": [],
+      "validateEmail": [],
+      "createUser": [
+        "hashPassword"
+      ],
+      "_main": [
+        "createUser",
+        "validateEmail"
+      ],
+      "cleanData": [],
+      "_processData": [
+        "cleanData"
+      ]
+    }
+  }
+]

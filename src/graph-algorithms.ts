@@ -1,9 +1,9 @@
 /**
  * Reusable graph algorithms for function dependency analysis.
- * Consolidates topological sorting, cycle detection, and path finding.
+ * Public: topologicalSort, detectCircularDependencies, findAndRemoveLeafFunctions.
  */
 
-export interface SortContext {
+interface SortContext {
 	dependencies: Map<string, string[]>;
 	visited: Set<string>;
 	temp: Set<string>;
@@ -11,7 +11,7 @@ export interface SortContext {
 	sourceOrder: Map<string, number>;
 }
 
-export interface CircularDepsContext {
+interface CircularDepsContext {
 	cycles: string[][];
 	visited: Set<string>;
 	recursionStack: Set<string>;
@@ -42,7 +42,6 @@ export function topologicalSort(
 		}
 	}
 
-	// Add unvisited functions (from cycles) in source order
 	const unvisited = names.filter((name) => !visited.has(name));
 	result.push(...unvisited);
 
@@ -50,62 +49,29 @@ export function topologicalSort(
 }
 
 /**
- * DFS visit for topological sort.
- * Handles cycle detection by tracking temp set.
- */
-export function visitDependencyNode(name: string, context: SortContext): void {
-	if (context.temp.has(name)) {
-		// Cycle detected - skip to allow partial ordering
-		return;
-	}
-	if (context.visited.has(name)) {
-		return;
-	}
-
-	context.temp.add(name);
-	const deps = context.dependencies.get(name) || [];
-	const orderedDeps = [...deps].sort(
-		(a, b) => (context.sourceOrder.get(a) ?? 999) - (context.sourceOrder.get(b) ?? 999),
-	);
-
-	for (const dep of orderedDeps) {
-		// Only visit if dependency is still in graph (not a removed leaf)
-		if (context.dependencies.has(dep)) {
-			visitDependencyNode(dep, context);
-		}
-	}
-
-	context.temp.delete(name);
-	context.visited.add(name);
-	context.result.push(name);
-}
-
-/**
- * Find and remove leaf functions (no outgoing edges) from dependency map.
- * Leaf functions are returned in source order.
+ * Find leaf functions (no outgoing edges) without mutating the input map.
+ * Returns leaf names (source order) and a new map of remaining dependencies.
  */
 export function findAndRemoveLeafFunctions(
 	dependencies: Map<string, string[]>,
 	sourceOrder: Map<string, number>,
-): string[] {
+): { leafNames: string[]; remaining: Map<string, string[]> } {
+	const remaining = new Map([...dependencies].map(([k, v]): [string, string[]] => [k, [...v]]));
 	const leafNames: string[] = [];
 
-	// Identify leaves
-	for (const [name, deps] of dependencies) {
+	for (const [name, deps] of remaining) {
 		if (deps.length === 0) {
 			leafNames.push(name);
 		}
 	}
 
-	// Remove from dependency map
 	for (const name of leafNames) {
-		dependencies.delete(name);
+		remaining.delete(name);
 	}
 
-	// Sort by source order
 	leafNames.sort((a, b) => (sourceOrder.get(a) ?? 999) - (sourceOrder.get(b) ?? 999));
 
-	return leafNames;
+	return { leafNames, remaining };
 }
 
 /**
@@ -133,9 +99,31 @@ export function detectCircularDependencies(
 	return context.cycles;
 }
 
-/**
- * DFS for cycle detection.
- */
+function visitDependencyNode(name: string, context: SortContext): void {
+	if (context.temp.has(name)) {
+		return;
+	}
+	if (context.visited.has(name)) {
+		return;
+	}
+
+	context.temp.add(name);
+	const deps = context.dependencies.get(name) || [];
+	const orderedDeps = [...deps].sort(
+		(a, b) => (context.sourceOrder.get(a) ?? 999) - (context.sourceOrder.get(b) ?? 999),
+	);
+
+	for (const dep of orderedDeps) {
+		if (context.dependencies.has(dep)) {
+			visitDependencyNode(dep, context);
+		}
+	}
+
+	context.temp.delete(name);
+	context.visited.add(name);
+	context.result.push(name);
+}
+
 function dfsDetectCycle(funcName: string, context: CircularDepsContext): void {
 	if (context.recursionStack.has(funcName)) {
 		const cycle = extractCycle(funcName, context);
@@ -162,29 +150,11 @@ function dfsDetectCycle(funcName: string, context: CircularDepsContext): void {
 	context.path.pop();
 }
 
-/**
- * Extract a cycle from the path when a back-edge is found.
- */
 function extractCycle(funcName: string, context: CircularDepsContext): string[] {
 	const cycleStart = context.path.indexOf(funcName);
 	return [...context.path.slice(cycleStart), funcName];
 }
 
-/**
- * Validate that a cycle is not self-recursive.
- */
 function isValidCycle(cycle: string[]): boolean {
-	// Skip "A → A → A" style cycles
 	return cycle.length > 2 || (cycle.length === 2 && cycle[0] !== cycle[1]);
-}
-
-/**
- * Filter violations to exclude those involving functions in cycles.
- */
-export function filterOutCyclicFunctions(
-	functionNames: Set<string>,
-	circularDependencies: string[][],
-): Set<string> {
-	const functionsInCycles = new Set(circularDependencies.flat());
-	return new Set([...functionNames].filter((name) => !functionsInCycles.has(name)));
 }

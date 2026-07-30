@@ -1,50 +1,53 @@
-import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { beforeAll, expect, test } from "bun:test";
+import { registerDefaultRules } from "../src/register-default-rules";
+import { clear } from "../src/registry";
+import { runCli } from "./cli-harness";
+import { withTempFile } from "./helpers";
 
-import { join } from "node:path";
-
-const CLI = ["bun", join(import.meta.dir, "../src/cli.ts")];
-
-test("exits with code 2 when subcommand appears as pattern", () => {
-	const proc = Bun.spawnSync([...CLI, ".", "fix"]);
-	expect(proc.exitCode).toBe(2);
-	expect(proc.stderr.toString()).toContain("looks like a subcommand");
+beforeAll(() => {
+	clear();
+	registerDefaultRules();
 });
 
-test("exits with code 2 when 'analyze' appears as pattern", () => {
-	const proc = Bun.spawnSync([...CLI, ".", "analyze"]);
-	expect(proc.exitCode).toBe(2);
-	expect(proc.stderr.toString()).toContain("looks like a subcommand");
+test("exits with code 2 when subcommand appears as pattern", async () => {
+	const result = await runCli([".", "fix"]);
+	expect(result.exitCode).toBe(2);
+	expect(result.stderr).toContain("looks like a subcommand");
 });
 
-test("exits with code 3 when no files match", () => {
-	const proc = Bun.spawnSync([
-		...CLI,
-		"analyze",
-		"fixtures/nonexistent-dir-xyz-abc/**/*.ts",
-	]);
-	expect(proc.exitCode).toBe(3);
-	expect(proc.stderr.toString()).toContain("No files matched");
+test("exits with code 2 when 'analyze' appears as pattern", async () => {
+	const result = await runCli([".", "analyze"]);
+	expect(result.exitCode).toBe(2);
+	expect(result.stderr).toContain("looks like a subcommand");
 });
 
-test("json analyze keeps stdout pure when no files match", () => {
-	const proc = Bun.spawnSync([
-		...CLI,
+test("exits with code 3 when no files match", async () => {
+	const result = await runCli(["analyze", "fixtures/nonexistent-dir-xyz-abc/**/*.ts"]);
+	expect(result.exitCode).toBe(3);
+	expect(result.stderr).toContain("No files matched");
+});
+
+test("json analyze keeps stdout pure when no files match", async () => {
+	const result = await runCli([
 		"analyze",
 		"fixtures/nonexistent-dir-xyz-abc/**/*.ts",
 		"--json",
 	]);
-	expect(proc.exitCode).toBe(3);
-	expect(proc.stdout.toString().trim()).toBe("[]");
-	expect(proc.stderr.toString()).toContain("No files matched");
+	expect(result.exitCode).toBe(3);
+	expect(result.stdout.trim()).toBe("[]");
+	expect(result.stderr).toContain("No files matched");
 });
 
 const STEP_DOWN_FIXTURE = "fixtures/test-violations.ts";
 const NESTED_FIXTURE = "fixtures/test-nested-violation.ts";
+const CLEAN_FIXTURE = "fixtures/clean.ts";
+const VIOLATION_FIXTURE = "fixtures/stepdown-violation.ts";
 
-test("json analyze serializes dependencyGraph as record", () => {
-	const proc = Bun.spawnSync([...CLI, "analyze", STEP_DOWN_FIXTURE, "--json"]);
-	expect(proc.exitCode).toBe(1);
-	const data = JSON.parse(proc.stdout.toString()) as {
+test("json analyze serializes dependencyGraph as record", async () => {
+	const result = await runCli(["analyze", STEP_DOWN_FIXTURE, "--json"]);
+	expect(result.exitCode).toBe(1);
+	const data = JSON.parse(result.stdout) as {
 		dependencyGraph?: Record<string, string[]>;
 		violations: { file: string }[];
 	}[];
@@ -55,36 +58,100 @@ test("json analyze serializes dependencyGraph as record", () => {
 	expect(Array.isArray(Object.keys(graph ?? {}))).toBe(true);
 });
 
-test("agents analyze emits envelope on stdout", () => {
-	const proc = Bun.spawnSync([...CLI, "agents", "analyze", STEP_DOWN_FIXTURE]);
-	expect(proc.exitCode).toBe(1);
-	const envelope = JSON.parse(proc.stdout.toString());
+test("agents analyze emits envelope on stdout", async () => {
+	const result = await runCli(["agents", "analyze", STEP_DOWN_FIXTURE]);
+	expect(result.exitCode).toBe(1);
+	const envelope = JSON.parse(result.stdout);
 	expect(envelope.schemaVersion).toBe(1);
 	expect(envelope.command).toBe("agents/analyze");
 	expect(envelope.summary.violations).toBeGreaterThan(0);
 	expect(envelope.exitCode).toBe(1);
 });
 
-test("agents fix dry-run includes preview without writing", () => {
-	const proc = Bun.spawnSync([...CLI, "agents", "fix", NESTED_FIXTURE, "--dry-run"]);
-	expect(proc.exitCode).toBe(0);
-	const envelope = JSON.parse(proc.stdout.toString());
+test("agents fix dry-run includes preview without writing", async () => {
+	const result = await runCli(["agents", "fix", NESTED_FIXTURE, "--dry-run"]);
+	expect(result.exitCode).toBe(0);
+	const envelope = JSON.parse(result.stdout);
 	expect(envelope.command).toBe("agents/fix");
-	const result = envelope.results[0];
-	expect(result.fixed).toBe(true);
-	expect(result.preview).toBeDefined();
-	expect(result.originalContent).toBeUndefined();
+	const fixResult = envelope.results[0];
+	expect(fixResult.fixed).toBe(true);
+	expect(fixResult.preview).toBeDefined();
+	expect(fixResult.originalContent).toBeUndefined();
 });
 
-test("agents schema rules lists stepdown and nested", () => {
-	const proc = Bun.spawnSync([...CLI, "agents", "schema", "rules"]);
-	expect(proc.exitCode).toBe(0);
-	const rules = JSON.parse(proc.stdout.toString()) as { id: string }[];
+test("fix --help documents --dry-run", async () => {
+	const result = await runCli(["fix", "--help"]);
+	expect(result.exitCode).toBe(0);
+	expect(result.stdout).toContain("--dry-run");
+	expect(result.stdout).toContain("Preview changes without writing files");
+});
+
+test("fix --dry-run prints diffs and does not write", async () => {
+	const original = await Bun.file(NESTED_FIXTURE).text();
+	await withTempFile(original, async (file) => {
+		const result = await runCli(["fix", file, "--dry-run"]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Would fix:");
+		expect(result.stdout).toMatch(/^[+-] /m);
+		expect(await Bun.file(file).text()).toBe(original);
+	});
+});
+
+test("fix without --dry-run writes files", async () => {
+	const original = await Bun.file(NESTED_FIXTURE).text();
+	await withTempFile(original, async (file) => {
+		const result = await runCli(["fix", file]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("Fixed:");
+		expect(result.stdout).not.toContain("Would fix:");
+		expect(await Bun.file(file).text()).not.toBe(original);
+	});
+});
+
+test("normal fix subcommand still works", async () => {
+	const result = await runCli(["fix", "fixtures/nonexistent-dir-xyz-abc/**/*.ts"]);
+	expect(result.exitCode).toBe(3);
+});
+
+test("fix on clean fixture exits 0", async () => {
+	const result = await runCli(["fix", CLEAN_FIXTURE]);
+	expect(result.exitCode).toBe(0);
+	expect(result.stdout).toContain("No files needed fixing");
+});
+
+test("agents schema rules lists stepdown and nested", async () => {
+	const result = await runCli(["agents", "schema", "rules"]);
+	expect(result.exitCode).toBe(0);
+	const rules = JSON.parse(result.stdout) as { id: string }[];
 	const ids = rules.map((r) => r.id).sort();
 	expect(ids).toEqual(["nested", "stepdown"]);
 });
 
-test("normal fix subcommand still works", () => {
-	const proc = Bun.spawnSync([...CLI, "fix", "fixtures/nonexistent-dir-xyz-abc/**/*.ts"]);
-	expect(proc.exitCode).toBe(3);
-});
+const FORMATS = ["human", "json", "agents"] as const;
+
+function loadGolden(
+	name: string,
+	format: (typeof FORMATS)[number],
+): { stdout: string; exitCode: number } {
+	const base = `tests/goldens/analyze-${name}-${format}`;
+	return {
+		stdout: readFileSync(`${base}.txt`, "utf8"),
+		exitCode: Number(readFileSync(`${base}.exit`, "utf8")),
+	};
+}
+
+for (const format of FORMATS) {
+	test(`--format ${format} on clean.ts matches golden`, async () => {
+		const golden = loadGolden("clean", format);
+		const result = await runCli(["analyze", CLEAN_FIXTURE, "--format", format]);
+		expect(result.exitCode).toBe(golden.exitCode);
+		expect(result.stdout).toBe(golden.stdout);
+	});
+
+	test(`--format ${format} on stepdown-violation.ts matches golden`, async () => {
+		const golden = loadGolden("stepdown-violation", format);
+		const result = await runCli(["analyze", VIOLATION_FIXTURE, "--format", format]);
+		expect(result.exitCode).toBe(golden.exitCode);
+		expect(result.stdout).toBe(golden.stdout);
+	});
+}

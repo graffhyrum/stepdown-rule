@@ -1,87 +1,58 @@
 import ts from "typescript";
-import { callGraphToDependencyMap } from "./ast-graph-builder";
-import { getPosition, getPositionFromOffset, isFunctionLike } from "./ast-utils";
+import { buildCallGraph, callGraphToDependencyMap } from "./ast-graph-builder";
+import { getPosition, isFunctionLike } from "./ast-utils";
 import { detectCircularDependencies as detectCycles } from "./graph-algorithms";
-import { getEnabled } from "./registry";
+import { findNestedFunctionViolations } from "./nested-violation-detector";
+import { Pipeline } from "./pipeline";
+import type { RuleRegistry } from "./registry";
 import type { CallSiteInfo, RuleContext, Violation } from "./rule-context";
 import { FileService } from "./services/FileService";
-import type { ParsedFile } from "./services/types";
+import type { IFileService, ParsedFile } from "./services/types";
+import { findStepdownViolations } from "./stepdown-violation-detector";
 import type {
 	AnalysisResult,
-	CallSite,
 	Config,
 	FunctionInfo,
 	NestedFunctionViolation,
 	StepdownViolation,
 } from "./types";
-export function findNestedViolations(ctx: RuleContext): NestedFunctionViolation[] {
-	return findNestedFunctionViolations(ctx.parsedFile.sourceFile, ctx.functions);
-}
-export function findStepdownViolations(ctx: RuleContext): StepdownViolation[] {
-	const violations = findViolations(ctx.functions, ctx.callGraph);
-	const circular = detectCircularDependencies(ctx.functions, ctx.callGraph);
-	return filterOutCircularViolations(violations, circular);
-}
+
+export { findStepdownViolations } from "./stepdown-violation-detector";
+
+/** Thin facade over {@link Pipeline.run} (mode: analyze). */
 export async function analyzeFiles(
 	patterns: string[],
 	config: Config,
-	fileService?: FileService,
+	fileService?: IFileService,
 	resolvedFiles?: string[],
+	registry?: RuleRegistry,
 ): Promise<AnalysisResult[]> {
 	const service = fileService ?? new FileService({ ignore: config.ignore });
-	const files = resolvedFiles ?? (await service.resolveFiles(patterns));
-	const enabledRules = getEnabled(config.enabledRuleIds);
-	const results: AnalysisResult[] = [];
-	const useRulePipeline = config.enabledRuleIds !== undefined;
-	for (const filePath of files) {
-		const parsedFile = await service.parseFile(filePath);
-		const result = useRulePipeline
-			? analyzeWithRules(parsedFile, enabledRules)
-			: analyzeParsedFile(parsedFile);
-		results.push(result);
-	}
-	return results;
+	const { analysisResults } = await Pipeline.run({
+		patterns,
+		config: { ...config, fix: false },
+		fileService: service,
+		registry,
+		mode: "analyze",
+		resolvedFiles,
+	});
+	return analysisResults;
 }
 export function analyzeParsedFile(parsedFile: ParsedFile): AnalysisResult {
-	const { sourceFile, filePath } = parsedFile;
-	const functions = extractFunctions(sourceFile);
-	const callGraph = buildCallGraph(functions, sourceFile);
-	const violations = findViolations(functions, callGraph);
-	const nestedFunctionViolations = findNestedFunctionViolations(sourceFile, functions);
-	const circularDependencies = detectCircularDependencies(functions, callGraph);
-	// Filter out violations that are part of circular dependency cycles (not actionable)
-	const actionableViolations = filterOutCircularViolations(violations, circularDependencies);
-	const dependencyGraph = callGraphToDependencyMap(callGraph);
+	const ctx = buildRuleContext(parsedFile);
+	const nestedFunctionViolations = findNestedFunctionViolations(
+		ctx.parsedFile.sourceFile,
+		ctx.functions,
+	);
+	const circularDependencies = detectCircularDependencies(ctx.functions, ctx.callGraph);
 	return {
-		file: filePath,
-		violations: actionableViolations,
+		file: ctx.parsedFile.filePath,
+		violations: findStepdownViolations(ctx),
 		nestedFunctionViolations,
 		circularDependencies,
-		totalFunctions: functions.length,
-		dependencyGraph,
+		totalFunctions: ctx.functions.length,
+		dependencyGraph: ctx.dependencyGraph,
 	};
-}
-function findNestedFunctionViolations(
-	sourceFile: ts.SourceFile,
-	functions: FunctionInfo[],
-): NestedFunctionViolation[] {
-	const violations: NestedFunctionViolation[] = [];
-	const functionMap = new Map(functions.map((f) => [f.name, f]));
-	const context = { sourceFile, functionMap, violations };
-	visitForNestedViolations(sourceFile, context);
-	return violations;
-}
-function findViolations(
-	functions: FunctionInfo[],
-	callGraph: Map<string, CallSiteInfo[]>,
-): StepdownViolation[] {
-	const violations: StepdownViolation[] = [];
-	const topLevelFunctions = functions.filter((f) => f.parentFunction === null);
-	for (const func of topLevelFunctions) {
-		const violationsForFunction = findViolationsForFunction(func, functions, callGraph);
-		violations.push(...violationsForFunction);
-	}
-	return violations;
 }
 export function analyzeWithRules(
 	parsedFile: ParsedFile,
@@ -99,7 +70,7 @@ export function analyzeWithRules(
 function violationsToAnalysisResult(ctx: RuleContext, violations: Violation[]): AnalysisResult {
 	const stepdownViolations = violations.filter(isStepdownViolation);
 	const nestedFunctionViolations = violations.filter(
-		(v): v is NestedFunctionViolation => "nested" in v,
+		(v): v is NestedFunctionViolation => v.kind === "nested",
 	);
 	const circularDependencies = detectCircularDependencies(ctx.functions, ctx.callGraph);
 	return {
@@ -121,7 +92,7 @@ function detectCircularDependencies(
 export function buildRuleContext(parsedFile: ParsedFile): RuleContext {
 	const { sourceFile } = parsedFile;
 	const functions = extractFunctions(sourceFile);
-	const callGraph = buildCallGraph(functions, sourceFile);
+	const callGraph = buildCallGraph(new Set(functions.map((f) => f.name)), sourceFile);
 	const dependencyGraph = callGraphToDependencyMap(callGraph);
 	return {
 		parsedFile,
@@ -129,39 +100,6 @@ export function buildRuleContext(parsedFile: ParsedFile): RuleContext {
 		callGraph,
 		dependencyGraph,
 	};
-}
-// buildCallGraph: Local version kept to capture position information
-// Global version in ast-graph-builder uses placeholder positions
-function buildCallGraph(
-	functions: FunctionInfo[],
-	sourceFile: ts.SourceFile,
-): Map<string, CallSiteInfo[]> {
-	function visitForCallGraph(node: ts.Node) {
-		if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-			const calledFunction = node.expression.getText(sourceFile);
-			if (functionNames.has(calledFunction)) {
-				const container = findContainingFunction(node, sourceFile);
-				if (container) {
-					const { line, column } = getPosition(sourceFile, node);
-					recordDependency(calledFunction, container, { line, column });
-				}
-			}
-		}
-		ts.forEachChild(node, visitForCallGraph);
-	}
-	function recordDependency(calledFunction: string, container: string, callSite: CallSite) {
-		const deps = callGraph.get(container);
-		if (deps) {
-			deps.push({ calledFunction, callSite });
-		}
-	}
-	const callGraph = new Map<string, CallSiteInfo[]>();
-	const functionNames = new Set(functions.map((f) => f.name));
-	for (const func of functions) {
-		callGraph.set(func.name, []);
-	}
-	visitForCallGraph(sourceFile);
-	return callGraph;
 }
 function extractFunctions(sourceFile: ts.SourceFile): FunctionInfo[] {
 	const functions: FunctionInfo[] = [];
@@ -202,32 +140,6 @@ function getAnonymousScopeName(node: ts.Node, parentFunction: string | null): st
 	if (!isFunctionLike(node)) return null;
 	if (node.parent && ts.isVariableDeclaration(node.parent)) return null;
 	return parentFunction ? `${parentFunction}.<anonymous>` : "<anonymous>";
-}
-function visitForNestedViolations(node: ts.Node, context: NestedViolationContext): void {
-	const { sourceFile, functionMap } = context;
-	if (ts.isFunctionDeclaration(node) && node.name) {
-		const funcInfo = functionMap.get(node.name.getText(sourceFile));
-		if (funcInfo) {
-			checkFunctionBodyAndProcess(node, funcInfo, context);
-		}
-	} else if (ts.isVariableStatement(node)) {
-		processVariableStatement(node, context);
-	}
-	ts.forEachChild(node, (child) => visitForNestedViolations(child, context));
-}
-function findContainingFunction(node: ts.Node, sourceFile: ts.SourceFile): string | null {
-	let current: ts.Node | undefined = node.parent;
-	while (current) {
-		if (ts.isFunctionDeclaration(current) && current.name) {
-			return current.name.getText(sourceFile);
-		}
-		const variableDeclarationName = checkVariableDeclaration(current, node, sourceFile);
-		if (variableDeclarationName !== null) {
-			return variableDeclarationName;
-		}
-		current = current.parent;
-	}
-	return null;
 }
 function handleVariableStatement(
 	node: ts.VariableStatement,
@@ -307,326 +219,8 @@ function handleFunctionDeclaration({
 	};
 	functions.push(functionInfo);
 }
-function processVariableStatement(
-	node: ts.VariableStatement,
-	context: NestedViolationContext,
-): void {
-	const { sourceFile, functionMap } = context;
-	for (const decl of node.declarationList.declarations) {
-		const isValidArrowFunc =
-			decl.initializer &&
-			isFunctionLike(decl.initializer) &&
-			decl.name &&
-			ts.isIdentifier(decl.name);
-		if (isValidArrowFunc && decl.name && decl.initializer) {
-			const funcInfo = functionMap.get(decl.name.getText(sourceFile));
-			if (funcInfo) {
-				checkFunctionBodyAndProcess(
-					decl.initializer as ts.FunctionLikeDeclaration,
-					funcInfo,
-					context,
-				);
-			}
-		}
-	}
-}
-function checkFunctionBodyAndProcess(
-	func: ts.FunctionLikeDeclaration,
-	funcInfo: FunctionInfo,
-	context: NestedViolationContext,
-): void {
-	const { sourceFile } = context;
-	if (!(func.body && ts.isBlock(func.body))) {
-		return;
-	}
-	const lastLogicLine = findLastLogicStatementLine(func.body.statements, sourceFile);
-	if (lastLogicLine === 0) {
-		return;
-	}
-	processStatements({
-		statements: func.body.statements,
-		parentInfo: funcInfo,
-		lastLogicLine,
-		context,
-	});
-}
-function processStatements(
-	params: StatementProcessContext & {
-		statements: ts.NodeArray<ts.Statement>;
-	},
-): void {
-	const { statements, parentInfo, lastLogicLine, context } = params;
-	for (const statement of statements) {
-		if (ts.isFunctionDeclaration(statement)) {
-			processFunctionDeclaration({ statement, parentInfo, lastLogicLine, context });
-		} else if (ts.isVariableStatement(statement)) {
-			processVariableDeclaration({ statement, parentInfo, lastLogicLine, context });
-		}
-	}
-}
-function processVariableDeclaration(params: VariableDeclParams): void {
-	const { statement, parentInfo, lastLogicLine, context } = params;
-	const { sourceFile, functionMap, violations } = context;
-	for (const decl of statement.declarationList.declarations) {
-		if (!(decl.initializer && isFunctionLike(decl.initializer))) {
-			continue;
-		}
-		if (!(decl.name && ts.isIdentifier(decl.name))) {
-			continue;
-		}
-		const nestedName = decl.name.getText(sourceFile);
-		const nestedInfo = functionMap.get(nestedName);
-		if (nestedInfo) {
-			checkAndAddViolation({
-				nodeStart: decl.initializer.getStart(),
-				nestedName,
-				nestedInfo,
-				parentInfo,
-				lastLogicLine,
-				violations,
-				sourceFile,
-			});
-			checkFunctionBodyAndProcess(
-				decl.initializer as ts.FunctionLikeDeclaration,
-				nestedInfo,
-				context,
-			);
-		}
-	}
-}
-function processFunctionDeclaration(params: FunctionDeclParams): void {
-	const { statement, parentInfo, lastLogicLine, context } = params;
-	const { sourceFile, functionMap, violations } = context;
-	if (!statement.name) {
-		return;
-	}
-	const nestedName = statement.name.getText(sourceFile);
-	const nestedInfo = functionMap.get(nestedName);
-	if (nestedInfo) {
-		checkAndAddViolation({
-			nodeStart: statement.getStart(),
-			nestedName,
-			nestedInfo,
-			parentInfo,
-			lastLogicLine,
-			violations,
-			sourceFile,
-		});
-	}
-	if (nestedInfo || statement.body) {
-		const targetInfo = nestedInfo || parentInfo;
-		checkFunctionBodyAndProcess(statement, targetInfo, context);
-	}
-}
-function checkAndAddViolation(params: ViolationCheckParams): void {
-	const { nodeStart, nestedName, nestedInfo, parentInfo, lastLogicLine, violations, sourceFile } =
-		params;
-	const nestedLine = getPositionFromOffset(sourceFile, nodeStart).line;
-	// Rule 1: Logic should come before function declarations within any scope
-	// If the nested function declaration appears before the last logic statement, it's a violation
-	// Exception: Don't report violation if the nested function is referenced in the function body
-	if (
-		nestedLine < lastLogicLine &&
-		!isReferencedInFunctionBody(nestedName, parentInfo, sourceFile)
-	) {
-		violations.push({
-			file: "",
-			parent: parentInfo,
-			nested: nestedInfo,
-			message: `Nested function violation: ${nestedName} should appear after all logic in ${parentInfo.name}`,
-		});
-	}
-}
-function isReferencedInFunctionBody(
-	nestedName: string,
-	parentInfo: FunctionInfo,
-	sourceFile: ts.SourceFile,
-): boolean {
-	// Find the function declaration for the parent
-	const functionNode = findFunctionNode(parentInfo, sourceFile);
-	if (!(functionNode?.body && ts.isBlock(functionNode.body))) {
-		return false;
-	}
-	// Check if the nested function is referenced anywhere in the function body,
-	// excluding the nested function's own declaration
-	return findIdentifierExcludingDefinitions(functionNode.body, nestedName, sourceFile);
-}
-function findIdentifierExcludingDefinitions(
-	node: ts.Node,
-	name: string,
-	sourceFile: ts.SourceFile,
-): boolean {
-	if (isFunctionDefinition(node, name, sourceFile)) {
-		return false;
-	}
-	if (isVariableFunctionDefinition(node, name, sourceFile)) {
-		return false;
-	}
-	if (matchesIdentifier(node, name, sourceFile)) {
-		return true;
-	}
-	for (const child of node.getChildren()) {
-		if (findIdentifierExcludingDefinitions(child, name, sourceFile)) {
-			return true;
-		}
-	}
-	return false;
-}
-function findFunctionNode(
-	funcInfo: FunctionInfo,
-	sourceFile: ts.SourceFile,
-): ts.FunctionLikeDeclaration | null {
-	function visitForFunctionNode(node: ts.Node): ts.FunctionLikeDeclaration | null {
-		const match = matchFunctionNode(node, funcInfo.position.start);
-		if (match) {
-			return match;
-		}
-		return ts.forEachChild(node, visitForFunctionNode) || null;
-	}
-	return visitForFunctionNode(sourceFile);
-}
-function matchFunctionNode(node: ts.Node, targetStart: number): ts.FunctionLikeDeclaration | null {
-	if (
-		(ts.isFunctionDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node)) &&
-		node.getStart() === targetStart
-	) {
-		return node as ts.FunctionLikeDeclaration;
-	}
-	if (ts.isVariableStatement(node) && node.getStart() === targetStart) {
-		const init = node.declarationList.declarations[0]?.initializer;
-		if (init && isFunctionLike(init)) {
-			return init as ts.FunctionLikeDeclaration;
-		}
-	}
-	return null;
-}
 function isStepdownViolation(v: Violation): v is StepdownViolation {
-	return "dependency" in v;
-}
-function findViolationsForFunction(
-	func: FunctionInfo,
-	functions: FunctionInfo[],
-	callGraph: Map<string, CallSiteInfo[]>,
-): StepdownViolation[] {
-	const violations: StepdownViolation[] = [];
-	const callSites = callGraph.get(func.name) || [];
-	for (const { calledFunction, callSite } of callSites) {
-		if (calledFunction === func.name) {
-			continue;
-		}
-		const depFunc = functions.find((f) => f.name === calledFunction);
-		if (depFunc?.parentFunction !== null) {
-			continue;
-		}
-		if (depFunc.position.line < func.position.line) {
-			violations.push({
-				file: "",
-				function: func,
-				dependency: depFunc,
-				message: `Stepdown violation: ${func.name} calls ${calledFunction} which appears above it`,
-				callSite,
-			});
-		}
-	}
-	return violations;
-}
-/**
- * Find the line number of the last "logic" statement in a block.
- * Logic statements are any statements that are NOT function declarations or
- * variable statements containing arrow functions/function expressions.
- * Returns 0 if no logic statements are found.
- */
-function findLastLogicStatementLine(
-	statements: ts.NodeArray<ts.Statement>,
-	sourceFile: ts.SourceFile,
-): number {
-	let lastLogicLine = 0;
-	for (const statement of statements) {
-		// Skip function declarations - they are not "logic"
-		if (ts.isFunctionDeclaration(statement)) {
-			continue;
-		}
-		// Skip variable statements that contain arrow functions or function expressions
-		if (ts.isVariableStatement(statement)) {
-			const hasOnlyFunctionDeclarations = statement.declarationList.declarations.every(
-				(decl) => decl.initializer && isFunctionLike(decl.initializer),
-			);
-			if (hasOnlyFunctionDeclarations) {
-				continue;
-			}
-		}
-		// This is a logic statement - update the last logic line
-		const line = getPosition(sourceFile, statement).line;
-		lastLogicLine = Math.max(lastLogicLine, line);
-	}
-	return lastLogicLine;
-}
-function isFunctionDefinition(node: ts.Node, name: string, sourceFile: ts.SourceFile): boolean {
-	return ts.isFunctionDeclaration(node) && node.name?.getText(sourceFile) === name;
-}
-function isVariableFunctionDefinition(
-	node: ts.Node,
-	name: string,
-	sourceFile: ts.SourceFile,
-): boolean {
-	if (!ts.isVariableStatement(node)) {
-		return false;
-	}
-	for (const decl of node.declarationList.declarations) {
-		const isMatchingIdentifier =
-			decl.name && ts.isIdentifier(decl.name) && decl.name.getText(sourceFile) === name;
-		if (isMatchingIdentifier) {
-			return true;
-		}
-	}
-	return false;
-}
-function matchesIdentifier(node: ts.Node, name: string, sourceFile: ts.SourceFile): boolean {
-	return ts.isIdentifier(node) && node.getText(sourceFile) === name;
-}
-function filterOutCircularViolations(
-	violations: StepdownViolation[],
-	circularDependencies: string[][],
-): StepdownViolation[] {
-	const cyclePairs = buildCyclePairs(circularDependencies);
-	return violations.filter((v) => !cyclePairs.has(pairKey(v.function.name, v.dependency.name)));
-}
-function buildCyclePairs(cycles: string[][]): Set<string> {
-	const pairs = new Set<string>();
-	for (const cycle of cycles) {
-		for (let i = 0; i < cycle.length - 1; i++) {
-			const a = cycle[i];
-			const b = cycle[i + 1];
-			if (a && b) {
-				pairs.add(pairKey(a, b));
-				pairs.add(pairKey(b, a));
-			}
-		}
-	}
-	return pairs;
-}
-function pairKey(a: string, b: string): string {
-	return `${a}\0${b}`;
-}
-function checkVariableDeclaration(
-	current: ts.Node,
-	node: ts.Node,
-	sourceFile: ts.SourceFile,
-): string | null {
-	if (!ts.isVariableStatement(current)) {
-		return null;
-	}
-	for (const declaration of current.declarationList.declarations) {
-		if (declaration.initializer && isFunctionLike(declaration.initializer)) {
-			const funcStart = declaration.initializer.getStart();
-			const funcEnd = declaration.initializer.getEnd();
-			const nodeStart = node.getStart();
-			if (nodeStart >= funcStart && nodeStart <= funcEnd) {
-				return declaration.name?.getText(sourceFile) || null;
-			}
-		}
-	}
-	return null;
+	return v.kind === "stepdown";
 }
 function hasExportModifier(node: ts.Node): boolean {
 	if (!ts.canHaveModifiers(node)) {
@@ -634,37 +228,6 @@ function hasExportModifier(node: ts.Node): boolean {
 	}
 	const modifiers = ts.getModifiers(node);
 	return !!modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
-}
-interface NestedViolationContext {
-	sourceFile: ts.SourceFile;
-	functionMap: Map<string, FunctionInfo>;
-	violations: NestedFunctionViolation[];
-}
-interface StatementProcessContext {
-	parentInfo: FunctionInfo;
-	lastLogicLine: number;
-	context: NestedViolationContext;
-}
-interface FunctionDeclParams {
-	statement: ts.FunctionDeclaration;
-	parentInfo: FunctionInfo;
-	lastLogicLine: number;
-	context: NestedViolationContext;
-}
-interface VariableDeclParams {
-	statement: ts.VariableStatement;
-	parentInfo: FunctionInfo;
-	lastLogicLine: number;
-	context: NestedViolationContext;
-}
-interface ViolationCheckParams {
-	nodeStart: number;
-	nestedName: string;
-	nestedInfo: FunctionInfo;
-	parentInfo: FunctionInfo;
-	lastLogicLine: number;
-	violations: NestedFunctionViolation[];
-	sourceFile: ts.SourceFile;
 }
 interface VariableStatementContext {
 	sourceFile: ts.SourceFile;

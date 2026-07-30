@@ -28,6 +28,15 @@ test("87w: StepdownRule.fix reduces violations", () => {
 	expect(afterViolations.length).toBeLessThan(violations.length);
 });
 
+test("stepdownRule.fix with empty violations returns unchanged content", () => {
+	const fixture = getViolationFixture("stepdown");
+	const service = new FileService();
+	const parsedFile = service.parseContent(fixture, "test.ts");
+	const ctx = buildRuleContext(parsedFile);
+	expect(stepdownRule.analyze(ctx).length).toBeGreaterThan(0);
+	expect(stepdownRule.fix(ctx, [])).toBe(ctx.parsedFile.content);
+});
+
 test("vld: NestedRule.analyze matches current behavior", () => {
 	const fixture = getViolationFixture("nested");
 	const service = new FileService();
@@ -36,6 +45,16 @@ test("vld: NestedRule.analyze matches current behavior", () => {
 	const violations = nestedRule.analyze(ctx);
 	expect(violations.length).toBeGreaterThan(0);
 });
+
+test("5x2.1.2: nestedRule.fix(ctx, []) is no-op", () => {
+	const fixture = getViolationFixture("nested");
+	const service = new FileService();
+	const parsedFile = service.parseContent(fixture, "test.ts");
+	const ctx = buildRuleContext(parsedFile);
+	expect(nestedRule.analyze(ctx).length).toBeGreaterThan(0);
+	expect(nestedRule.fix(ctx, [])).toBe(fixture);
+});
+
 
 test("vld: NestedRule.fix runs; stepdown then nested chain reduces violations", () => {
 	const fixture = getViolationFixture("nested");

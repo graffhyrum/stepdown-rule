@@ -1,8 +1,15 @@
-import { expect, test } from "bun:test";
+import { beforeAll, expect, test } from "bun:test";
 import ts from "typescript";
 import { analyzeFiles, analyzeParsedFile } from "../src/analyzer";
 import { fixFiles, fixParsedFile } from "../src/fixer";
-import { fixConfig, totalViolations, withTempFile } from "./helpers";
+import { registerDefaultRules } from "../src/register-default-rules";
+import { clear } from "../src/registry";
+import { fixCode, fixConfig, totalViolations, withTempFile } from "./helpers";
+
+beforeAll(() => {
+	clear();
+	registerDefaultRules();
+});
 
 /**
  * hje: Fixer must use analyzer's dependency graph.
@@ -38,7 +45,41 @@ function main() {
 	);
 });
 
-test("hje: analyze→fix→analyze converges", async () => {
+test("hje: analyze→fix→analyze converges", () => {
+	const content = `
+const callee = () => "leaf";
+const caller = () => callee();
+`;
+	const { after } = fixCode(content);
+	expect(totalViolations(after)).toBe(0);
+});
+
+/**
+ * Rule: anything the analyzer detects must be fixable by the fixer.
+ * Callee-defined-first with multiple callers (e.g. createUnfixedResult pattern).
+ */
+test("stepdown: callee-first with multiple callers → fix → 0 violations", () => {
+	const content = `function sharedHelper() { return "ok"; }
+function callerA() { return sharedHelper(); }
+function callerB() { return sharedHelper(); }
+function callerC() { return sharedHelper(); }
+`;
+	const before = totalViolations(
+		analyzeParsedFile({
+			sourceFile: ts.createSourceFile("test.ts", content, ts.ScriptTarget.Latest, true),
+			filePath: "test.ts",
+			content,
+		}),
+	);
+	expect(before).toBeGreaterThan(0);
+
+	const { result, after } = fixCode(content);
+	expect(result.fixed).toBe(true);
+	expect(result.errors).toHaveLength(0);
+	expect(after.violations.length).toBe(0);
+});
+
+test("integration: analyze→fixFiles→analyze on disk converges", async () => {
 	const content = `
 const callee = () => "leaf";
 const caller = () => callee();
@@ -46,38 +87,9 @@ const caller = () => callee();
 	await withTempFile(content, async (file) => {
 		const [before] = await analyzeFiles([file], fixConfig);
 		const violationsBefore = totalViolations(before);
-
 		await fixFiles([file], fixConfig);
-
 		const [after] = await analyzeFiles([file], fixConfig);
-		const violationsAfter = totalViolations(after);
-
-		expect(violationsAfter).toBeLessThanOrEqual(violationsBefore);
-		expect(violationsAfter).toBe(0);
-	});
-});
-
-/**
- * Rule: anything the analyzer detects must be fixable by the fixer.
- * Callee-defined-first with multiple callers (e.g. createUnfixedResult pattern).
- */
-test("stepdown: callee-first with multiple callers → fix → 0 violations", async () => {
-	const content = `function sharedHelper() { return "ok"; }
-function callerA() { return sharedHelper(); }
-function callerB() { return sharedHelper(); }
-function callerC() { return sharedHelper(); }
-`;
-	await withTempFile(content, async (file) => {
-		const [before] = await analyzeFiles([file], fixConfig);
-		const stepdownBefore = before?.violations.length ?? 0;
-		expect(stepdownBefore).toBeGreaterThan(0);
-
-		const [fixResult] = await fixFiles([file], fixConfig);
-		expect(fixResult?.fixed).toBe(true);
-		expect(fixResult?.errors).toHaveLength(0);
-
-		const [after] = await analyzeFiles([file], fixConfig);
-		const stepdownAfter = after?.violations.length ?? 0;
-		expect(stepdownAfter).toBe(0);
+		expect(totalViolations(after)).toBeLessThanOrEqual(violationsBefore);
+		expect(totalViolations(after)).toBe(0);
 	});
 });

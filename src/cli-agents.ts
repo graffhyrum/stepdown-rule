@@ -1,15 +1,13 @@
 import { Argument, Command, Option } from "commander";
 import { emitCliError, type CliErrorPayload } from "./cli-errors";
+import { exitCodeFromErrors, ruleDescription } from "./cli-output";
 import {
-	buildAnalyzeEnvelope,
-	buildFixEnvelope,
-	emitAgentsJson,
-	exitCodeFromErrors,
-	fixResultsIndicateFailure,
-	ruleDescription,
-	toAgentsFixResults,
-} from "./cli-output";
-import { configOption, ignoreOption, patternsArgument, rulesOption } from "./cli-options";
+	configOption,
+	dryRunOption,
+	ignoreOption,
+	patternsArgument,
+	rulesOption,
+} from "./cli-options";
 import {
 	buildConfigFromCliSafe,
 	resolvePatterns,
@@ -24,12 +22,17 @@ import {
 } from "./config/schema";
 import { ExitUsage } from "./exit-codes";
 import { list as listRules } from "./registry";
+import { createReporter } from "./reporter";
 import { FileService } from "./services/FileService";
 import type { Config } from "./types";
+
 const schemaTargetArgument = new Argument(
 	"<target>",
 	"Schema target: config | analyze-output | fix-output | rules",
 );
+
+const agentsReporter = createReporter("agents");
+
 type AgentsPreflight =
 	| {
 			ok: true;
@@ -41,6 +44,7 @@ type AgentsPreflight =
 			ok: false;
 			errors: CliErrorPayload[];
 	  };
+
 export function registerAgentsCommand(program: Command): void {
 	const agents = new Command("agents");
 	agents.description("Agent-optimized commands: stable JSON envelope on stdout");
@@ -68,7 +72,7 @@ export function registerAgentsCommand(program: Command): void {
 		.addOption(ignoreOption)
 		.addOption(configOption)
 		.addOption(rulesOption)
-		.addOption(new Option("--dry-run", "Preview changes without writing files").default(false))
+		.addOption(dryRunOption)
 		.addOption(
 			new Option(
 				"--include-content",
@@ -98,6 +102,7 @@ export function registerAgentsCommand(program: Command): void {
 	agents.addCommand(schemaCmd);
 	program.addCommand(agents);
 }
+
 async function runAgentsFix(
 	patterns: string[],
 	options: CliOptions & {
@@ -107,9 +112,9 @@ async function runAgentsFix(
 ): Promise<void> {
 	const preflight = await agentsPreflight(patterns, options);
 	if (!preflight.ok) {
-		const envelope = buildFixEnvelope("agents/fix", [], preflight.errors, true);
-		emitAgentsJson(envelope);
-		process.exitCode = envelope.exitCode;
+		process.exitCode = agentsReporter.reportEarlyFailure("fix", preflight.errors, {
+			command: "agents/fix",
+		});
 		return;
 	}
 	const dryRun = options.dryRun ?? false;
@@ -117,15 +122,13 @@ async function runAgentsFix(
 		dryRun,
 		resolvedFiles: preflight.files,
 	});
-	const agentsResults = toAgentsFixResults(fixResults, {
+	process.exitCode = agentsReporter.reportFix(fixResults, {
 		dryRun,
 		includeContent: options.includeContent ?? false,
+		command: "agents/fix",
 	});
-	const fixFailed = fixResultsIndicateFailure(fixResults);
-	const envelope = buildFixEnvelope("agents/fix", agentsResults, [], fixFailed);
-	emitAgentsJson(envelope);
-	process.exitCode = envelope.exitCode;
 }
+
 async function runAgentsAnalyze(
 	patterns: string[],
 	options: CliOptions & {
@@ -134,9 +137,9 @@ async function runAgentsAnalyze(
 ): Promise<void> {
 	const preflight = await agentsPreflight(patterns, options);
 	if (!preflight.ok) {
-		const envelope = buildAnalyzeEnvelope("agents/analyze", [], preflight.errors, false);
-		emitAgentsJson(envelope);
-		process.exitCode = envelope.exitCode;
+		process.exitCode = agentsReporter.reportEarlyFailure("analyze", preflight.errors, {
+			command: "agents/analyze",
+		});
 		return;
 	}
 	const results = await runAnalyze(
@@ -145,32 +148,26 @@ async function runAgentsAnalyze(
 		preflight.fileService,
 		preflight.files,
 	);
-	const envelope = buildAnalyzeEnvelope(
-		"agents/analyze",
-		results,
-		[],
-		options.includeGraph ?? false,
-	);
-	emitAgentsJson(envelope);
-	process.exitCode = envelope.exitCode;
+	process.exitCode = agentsReporter.reportAnalyze(results, {
+		includeGraph: options.includeGraph ?? false,
+		command: "agents/analyze",
+	});
 }
+
 function handleAgentsFailure(command: string, error: unknown): void {
 	const payload = internalErrorPayload(error);
 	emitCliError(payload);
 	if (command === "agents/analyze") {
-		const envelope = buildAnalyzeEnvelope(command, [], [payload], false);
-		emitAgentsJson(envelope);
-		process.exitCode = envelope.exitCode;
+		process.exitCode = agentsReporter.reportEarlyFailure("analyze", [payload], { command });
 		return;
 	}
 	if (command === "agents/fix") {
-		const envelope = buildFixEnvelope(command, [], [payload], true);
-		emitAgentsJson(envelope);
-		process.exitCode = envelope.exitCode;
+		process.exitCode = agentsReporter.reportEarlyFailure("fix", [payload], { command });
 		return;
 	}
 	process.exitCode = exitCodeFromErrors([payload]);
 }
+
 function internalErrorPayload(error: unknown): CliErrorPayload {
 	return {
 		code: "INTERNAL_ERROR",
@@ -178,6 +175,7 @@ function internalErrorPayload(error: unknown): CliErrorPayload {
 		hint: "Report this issue with the command and file patterns used.",
 	};
 }
+
 async function agentsPreflight(patterns: string[], options: CliOptions): Promise<AgentsPreflight> {
 	const errors: CliErrorPayload[] = [];
 	const built = await buildConfigFromCliSafe(options);
@@ -195,6 +193,7 @@ async function agentsPreflight(patterns: string[], options: CliOptions): Promise
 	}
 	return { ok: true, config: built.config, fileService, files: resolved.files };
 }
+
 function runAgentsSchema(target: string): void {
 	switch (target) {
 		case "config":

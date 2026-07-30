@@ -1,186 +1,27 @@
 import ts from "typescript";
-import { analyzeParsedFile, analyzeWithRules, buildRuleContext } from "./analyzer";
-import {
-	buildDependencyGraph,
-	extractDependenciesFor,
-	extractFunctionName,
-} from "./ast-graph-builder";
-import { categorizeNodes, reconstructStatements } from "./ast-node-visitors";
-import { isFunctionLike } from "./ast-utils";
-import {
-	findAndRemoveLeafFunctions,
-	topologicalSort as sortTopologically,
-} from "./graph-algorithms";
-import { getEnabled } from "./registry";
+import { buildRuleContext } from "./analyzer";
+import { buildDependencyGraph } from "./ast-graph-builder";
+import { categorizeNodes } from "./ast-node-visitors";
+import { transformNestedBlocks } from "./nested-block-transform";
+import { Pipeline, type PipelineResult } from "./pipeline";
+import type { RuleRegistry } from "./registry";
 import type { ViolationRule } from "./rule-context";
 import { FileService } from "./services/FileService";
+import type { IFileService } from "./services/types";
+import { applyTopLevelReorder } from "./stepdown-top-level-reorder";
 import type { AnalysisResult, Config, FixResult } from "./types";
-export function applyNestedOnly(sourceFile: ts.SourceFile): string {
-	return defaultPrinter.printFile(transformNestedBlocks(sourceFile));
-}
-export function reorderTopLevelOnly(
-	sourceFile: ts.SourceFile,
-	dependencyGraph: Map<string, string[]>,
-): string {
-	const categorized = categorizeNodes(sourceFile);
-	const reorderedFunctions = reorderFunctions(categorized.functions, dependencyGraph, sourceFile);
-	const newStatements = reconstructStatements(categorized, reorderedFunctions);
-	const newSourceFile = ts.factory.updateSourceFile(sourceFile, newStatements);
-	return defaultPrinter.printFile(newSourceFile);
-}
+
+export type { PipelineResult };
+
 export interface FixFilesOptions {
 	dryRun?: boolean;
 	resolvedFiles?: string[];
 }
-
-export async function fixFiles(
-	patterns: string[],
-	config: Config,
-	fileService?: FileService,
-	options: FixFilesOptions = {},
-): Promise<FixResult[]> {
-	const { fixResults } = await runPipeline(
-		patterns,
-		{ ...config, fix: true },
-		fileService,
-		options,
-	);
-	return fixResults;
-}
-export async function runPipeline(
-	patterns: string[],
-	config: Config,
-	fileService?: FileService,
-	pipelineOptions: FixFilesOptions = {},
-): Promise<PipelineResult> {
-	const dryRun = pipelineOptions.dryRun ?? false;
-	const resolvedFiles = pipelineOptions.resolvedFiles;
-	const service = fileService ?? new FileService({ ignore: config.ignore });
-	const files = resolvedFiles ?? (await service.resolveFiles(patterns));
-	const enabledRules = getEnabled(config.enabledRuleIds);
-	const useRulePipeline = config.enabledRuleIds !== undefined;
-	const analysisResults: AnalysisResult[] = [];
-	const fixResults: FixResult[] = [];
-	for (const filePath of files) {
-		const { analysisResult, fixResult } = await processOneFile({
-			filePath,
-			config,
-			service,
-			enabledRules,
-			useRulePipeline,
-			dryRun,
-		});
-		analysisResults.push(analysisResult);
-		if (config.fix && fixResult) {
-			fixResults.push(fixResult);
-		}
-	}
-	return { analysisResults, fixResults };
-}
-async function processOneFile(params: {
-	filePath: string;
-	config: Config;
-	service: FileService;
-	enabledRules: ViolationRule[];
-	useRulePipeline: boolean;
-	dryRun: boolean;
-}): Promise<{
-	analysisResult: AnalysisResult;
-	fixResult: FixResult | null;
-}> {
-	const { filePath, config, service, enabledRules, useRulePipeline, dryRun } = params;
-	const parsedFile = await service.parseFile(filePath);
-	const analysisResult = useRulePipeline
-		? analyzeWithRules(parsedFile, enabledRules)
-		: analyzeParsedFile(parsedFile);
-	if (!config.fix) {
-		return { analysisResult, fixResult: null };
-	}
-	if (useRulePipeline) {
-		try {
-			const content = await service.readFile(filePath);
-			const result = fixFileWithRules({
-				filePath,
-				originalContent: content,
-				enabledRules,
-				service,
-			});
-			if (result.fixed && !dryRun) {
-				await service.writeFile(filePath, result.fixedContent);
-			}
-			return { analysisResult, fixResult: result };
-		} catch (error) {
-			const errorMessage = error instanceof Error ? error.message : String(error);
-			return {
-				analysisResult,
-				fixResult: createUnfixedResult(filePath, [errorMessage]),
-			};
-		}
-	}
-	const fixResult = await processAnalysisResult(analysisResult, config, service, dryRun);
-	return { analysisResult, fixResult };
-}
-export function fixFileWithRules(params: {
-	filePath: string;
-	originalContent: string;
-	enabledRules: ViolationRule[];
-	service: FileService;
-}): FixResult {
-	const { filePath, originalContent, enabledRules, service } = params;
-	let content = originalContent;
-	for (const rule of enabledRules) {
-		const parsedFile = service.parseContent(content, filePath);
-		const ctx = buildRuleContext(parsedFile);
-		const violations = rule.analyze(ctx);
-		if (violations.length > 0) {
-			content = rule.fix(ctx, violations);
-		}
-	}
-	const fixed = content !== originalContent;
-	return {
-		file: filePath,
-		fixed,
-		originalContent,
-		fixedContent: content,
-		reordered: fixed ? countFunctionMovements(originalContent, content) : 0,
-		errors: [],
-	};
-}
-async function processAnalysisResult(
-	result: AnalysisResult,
-	config: Config,
-	service: FileService,
-	dryRun: boolean,
-): Promise<FixResult> {
-	if (result.violations.length === 0 && result.nestedFunctionViolations.length === 0) {
-		return createNoViolationsResult(result.file);
-	}
-	return await fixFileWithErrorHandling({
-		filePath: result.file,
-		config,
-		service,
-		analysisResult: result,
-		dryRun,
-	});
-}
-async function fixFileWithErrorHandling(params: {
-	filePath: string;
-	config: Config;
-	service: FileService;
-	analysisResult: AnalysisResult;
-	dryRun: boolean;
-}): Promise<FixResult> {
-	try {
-		return await fixFile(params);
-	} catch (error) {
-		const errorMessage = error instanceof Error ? error.message : String(error);
-		return createUnfixedResult(params.filePath, [errorMessage]);
-	}
-}
+const defaultPrinter = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
 export async function fixFile(params: {
 	filePath: string;
 	config: Config;
-	service: FileService;
+	service: IFileService;
 	analysisResult: AnalysisResult;
 	dryRun: boolean;
 }): Promise<FixResult> {
@@ -199,9 +40,23 @@ export function fixParsedFile(params: {
 	analysisResult?: AnalysisResult;
 }): FixResult {
 	const { content, filePath, analysisResult } = params;
+	if (
+		analysisResult &&
+		analysisResult.violations.length === 0 &&
+		analysisResult.nestedFunctionViolations.length === 0
+	) {
+		return {
+			file: filePath,
+			fixed: false,
+			originalContent: content,
+			fixedContent: content,
+			reordered: 0,
+			errors: [],
+		};
+	}
 	const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
 	const fixedContent = reorderFunctionDeclarations(sourceFile, analysisResult?.dependencyGraph);
-	const hasChanges = fixedContent !== content;
+	const hasChanges = defaultPrinter.printFile(sourceFile) !== fixedContent;
 	if (hasChanges) {
 		return {
 			file: filePath,
@@ -221,15 +76,107 @@ export function fixParsedFile(params: {
 		errors: [],
 	};
 }
+function reorderFunctionDeclarations(
+	sourceFile: ts.SourceFile,
+	analyzerDependencyGraph?: Map<string, string[]>,
+): string {
+	const dependencies =
+		analyzerDependencyGraph ??
+		buildDependencyGraph(categorizeNodes(sourceFile).functions, sourceFile).dependencies;
+	let newSourceFile = applyTopLevelReorder(sourceFile, dependencies);
+	newSourceFile = transformNestedBlocks(newSourceFile);
+	return defaultPrinter.printFile(newSourceFile);
+}
+/** Thin facade over {@link Pipeline.run} (mode: fix); returns fixResults only. */
+export async function fixFiles(
+	patterns: string[],
+	config: Config,
+	fileService?: IFileService,
+	options: FixFilesOptions = {},
+	registry?: RuleRegistry,
+): Promise<FixResult[]> {
+	const { fixResults } = await runPipeline(
+		patterns,
+		{ ...config, fix: true },
+		fileService,
+		options,
+		registry,
+	);
+	return fixResults;
+}
+/** Thin facade over {@link Pipeline.run} (mode: fix). */
+export async function runPipeline(
+	patterns: string[],
+	config: Config,
+	fileService?: IFileService,
+	pipelineOptions: FixFilesOptions = {},
+	registry?: RuleRegistry,
+): Promise<PipelineResult> {
+	const service = fileService ?? new FileService({ ignore: config.ignore });
+	return Pipeline.run({
+		patterns,
+		config: { ...config, fix: true },
+		fileService: service,
+		registry,
+		mode: "fix",
+		resolvedFiles: pipelineOptions.resolvedFiles,
+		dryRun: pipelineOptions.dryRun,
+	});
+}
+export function fixFileWithRules(params: {
+	filePath: string;
+	originalContent: string;
+	enabledRules: ViolationRule[];
+	service: IFileService;
+}): FixResult {
+	const { filePath, originalContent, enabledRules, service } = params;
+	let content = originalContent;
+	for (const rule of enabledRules) {
+		const parsedFile = service.parseContent(content, filePath);
+		const ctx = buildRuleContext(parsedFile);
+		const violations = rule.analyze(ctx);
+		if (violations.length > 0) {
+			content = rule.fix(ctx, violations);
+		}
+	}
+	const fixed = hasPrintToPrintChange(originalContent, content, filePath);
+	return {
+		file: filePath,
+		fixed,
+		originalContent,
+		fixedContent: content,
+		reordered: fixed ? countFunctionMovements(originalContent, content) : 0,
+		errors: [],
+	};
+}
+/** True when printing both sides yields different text (never raw !== printed). */
+function hasPrintToPrintChange(
+	originalContent: string,
+	candidateContent: string,
+	filePath: string,
+): boolean {
+	return printSource(originalContent, filePath) !== printSource(candidateContent, filePath);
+}
+function printSource(content: string, filePath: string): string {
+	return defaultPrinter.printFile(
+		ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true),
+	);
+}
 // Leaf finding and topological sort now use graph-algorithms module
 // MOVEMENT COUNTING: quantify function relocations
 function countFunctionMovements(original: string, fixed: string): number {
 	const originalPositions = buildPositionMap(original);
 	const fixedLines = fixed.split("\n");
+	const occurrence = new Map<string, number>();
 	let reorders = 0;
 	for (const [index, line] of fixedLines.entries()) {
 		const trimmed = line.trim();
-		const originalPos = originalPositions.get(trimmed);
+		if (!isFunctionSignature(trimmed)) {
+			continue;
+		}
+		const occ = occurrence.get(trimmed) ?? 0;
+		occurrence.set(trimmed, occ + 1);
+		const originalPos = originalPositions.get(positionKey(occ, trimmed));
 		if (originalPos !== undefined && Math.abs(originalPos - index) > 10) {
 			reorders++;
 		}
@@ -238,265 +185,24 @@ function countFunctionMovements(original: string, fixed: string): number {
 }
 function buildPositionMap(content: string): Map<string, number> {
 	const positions = new Map<string, number>();
+	const occurrence = new Map<string, number>();
 	const lines = content.split("\n");
 	lines.forEach((line, index) => {
 		const trimmed = line.trim();
 		if (isFunctionSignature(trimmed)) {
-			positions.set(trimmed, index);
+			const occ = occurrence.get(trimmed) ?? 0;
+			occurrence.set(trimmed, occ + 1);
+			positions.set(positionKey(occ, trimmed), index);
 		}
 	});
 	return positions;
 }
-function reorderFunctionDeclarations(
-	sourceFile: ts.SourceFile,
-	analyzerDependencyGraph?: Map<string, string[]>,
-): string {
-	const categorized = categorizeNodes(sourceFile);
-	const dependencies =
-		analyzerDependencyGraph ?? buildDependencyGraph(categorized.functions, sourceFile).dependencies;
-	const reorderedFunctions = reorderFunctions(categorized.functions, dependencies, sourceFile);
-	const newStatements = reconstructStatements(categorized, reorderedFunctions);
-	let newSourceFile = ts.factory.updateSourceFile(sourceFile, newStatements);
-	newSourceFile = transformNestedBlocks(newSourceFile);
-	return defaultPrinter.printFile(newSourceFile);
-}
-function transformNestedBlocks(sourceFile: ts.SourceFile): ts.SourceFile {
-	return visitForNestedBlocks(sourceFile, sourceFile) as ts.SourceFile;
-}
-function visitForNestedBlocks(node: ts.Node, sourceFile: ts.SourceFile): ts.Node {
-	const arrowOrExpr = tryReorderArrowOrFunctionExpr(node, sourceFile);
-	if (arrowOrExpr) return arrowOrExpr;
-	const fnDecl = tryReorderFunctionDeclaration(node, sourceFile);
-	if (fnDecl) return fnDecl;
-	if (ts.isSourceFile(node)) {
-		return ts.factory.updateSourceFile(
-			node,
-			node.statements.map((s) => visitForNestedBlocks(s, sourceFile) as ts.Statement),
-		);
-	}
-	// ExpressionStatement wraps CallExpression (e.g., describe("...", () => { ... }))
-	// Limitation: does not cover VariableStatement wrapping CallExpression (const suite = describe(...))
-	if (ts.isExpressionStatement(node)) {
-		const inner = visitForNestedBlocks(node.expression, sourceFile);
-		if (inner !== node.expression) {
-			return ts.factory.updateExpressionStatement(node, inner as ts.Expression);
-		}
-		return node;
-	}
-	if (ts.isVariableStatement(node)) return visitVariableStatementNested(node, sourceFile);
-	if (ts.isCallExpression(node)) return visitCallExpressionNested(node, sourceFile);
-	return node;
-}
-function visitCallExpressionNested(node: ts.CallExpression, sourceFile: ts.SourceFile): ts.Node {
-	const newArgs = node.arguments.map((arg) => {
-		if (!isFunctionLike(arg)) return arg;
-		return visitForNestedBlocks(arg, sourceFile) as ts.Expression;
-	});
-	const changed = newArgs.some((a, i) => a !== node.arguments[i]);
-	return changed
-		? ts.factory.updateCallExpression(node, node.expression, node.typeArguments, newArgs)
-		: node;
-}
-function visitVariableStatementNested(
-	node: ts.VariableStatement,
-	sourceFile: ts.SourceFile,
-): ts.Node {
-	const newDecls = node.declarationList.declarations.map((d) => {
-		if (!d.initializer) return d;
-		const newInit = visitForNestedBlocks(d.initializer, sourceFile) as ts.Expression;
-		return newInit === d.initializer
-			? d
-			: ts.factory.updateVariableDeclaration(d, d.name, d.exclamationToken, d.type, newInit);
-	});
-	const changed = newDecls.some((d, i) => d !== node.declarationList.declarations[i]);
-	return changed
-		? ts.factory.updateVariableStatement(
-				node,
-				node.modifiers,
-				ts.factory.updateVariableDeclarationList(node.declarationList, newDecls),
-			)
-		: node;
-}
-function tryReorderFunctionDeclaration(node: ts.Node, sourceFile: ts.SourceFile): ts.Node | null {
-	if (!(ts.isFunctionDeclaration(node) && node.body && ts.isBlock(node.body))) return null;
-	const body = node.body;
-	if (body.statements.length < 2) return null;
-	const reordered = reorderBlockStatements(body, sourceFile);
-	if (!reordered) return null;
-	return ts.factory.updateFunctionDeclaration(
-		node,
-		node.modifiers,
-		node.asteriskToken,
-		node.name,
-		node.typeParameters,
-		node.parameters,
-		node.type,
-		reordered,
-	);
-}
-function tryReorderArrowOrFunctionExpr(node: ts.Node, sourceFile: ts.SourceFile): ts.Node | null {
-	if (!isFunctionLike(node)) return null;
-	const fn = node as ts.ArrowFunction | ts.FunctionExpression;
-	const body = fn.body;
-	if (!ts.isBlock(body) || body.statements.length < 2) return null;
-	const reordered = reorderBlockStatements(body, sourceFile);
-	if (!reordered) return null;
-	if (ts.isArrowFunction(fn)) {
-		return ts.factory.updateArrowFunction(
-			fn,
-			fn.modifiers,
-			fn.typeParameters,
-			fn.parameters,
-			fn.type,
-			fn.equalsGreaterThanToken,
-			reordered,
-		);
-	}
-	return ts.factory.updateFunctionExpression(
-		fn,
-		fn.modifiers,
-		fn.asteriskToken,
-		fn.name,
-		fn.typeParameters,
-		fn.parameters,
-		fn.type,
-		reordered,
-	);
-}
-function reorderBlockStatements(block: ts.Block, sourceFile: ts.SourceFile): ts.Block | null {
-	const funcStatements: Array<{
-		stmt: ts.Statement;
-		name: string;
-	}> = [];
-	for (const stmt of block.statements) {
-		const name = extractStatementFunctionName(stmt, sourceFile);
-		if (name) funcStatements.push({ stmt, name });
-	}
-	if (funcStatements.length < 2) return null;
-	const functionNames = new Map<string, ts.Node>();
-	for (const { stmt, name } of funcStatements) {
-		functionNames.set(name, stmt);
-	}
-	const dependencies = new Map<string, string[]>();
-	for (const { stmt, name } of funcStatements) {
-		const deps = extractDependenciesFor(stmt, sourceFile, functionNames);
-		dependencies.set(name, deps);
-	}
-	const blockSourceOrder = new Map<string, number>();
-	for (const [i, { name }] of funcStatements.entries()) {
-		blockSourceOrder.set(name, i);
-	}
-	const sorted = sortTopologically(dependencies, blockSourceOrder).reverse();
-	const reorderedStmts = sorted
-		.map((n) => funcStatements.find((f) => f.name === n)?.stmt)
-		.filter((s): s is ts.Statement => s !== undefined);
-	const otherStatements = block.statements.filter((s) => !funcStatements.some((f) => f.stmt === s));
-	const newStatements = [...otherStatements, ...reorderedStmts];
-	if (
-		JSON.stringify(newStatements.map((s) => s.getText(sourceFile))) !==
-		JSON.stringify(block.statements.map((s) => s.getText(sourceFile)))
-	) {
-		return ts.factory.createBlock(newStatements, true);
-	}
-	return null;
-}
-function createNoViolationsResult(file: string): FixResult {
-	return createUnfixedResult(file, []);
-}
-function createUnfixedResult(file: string, errors: string[] = []): FixResult {
-	return {
-		file,
-		fixed: false,
-		originalContent: "",
-		fixedContent: "",
-		reordered: 0,
-		errors,
-	};
-}
-function extractStatementFunctionName(
-	stmt: ts.Statement,
-	sourceFile: ts.SourceFile,
-): string | null {
-	if (ts.isFunctionDeclaration(stmt) && stmt.name) {
-		return stmt.name.getText(sourceFile);
-	}
-	if (ts.isVariableStatement(stmt)) {
-		const [decl] = stmt.declarationList.declarations;
-		if (
-			decl?.name &&
-			ts.isIdentifier(decl.name) &&
-			decl.initializer &&
-			isFunctionLike(decl.initializer)
-		) {
-			return decl.name.getText(sourceFile);
-		}
-	}
-	return null;
-}
-// TOPOLOGICAL ORDERING: sort functions by dependencies
-function reorderFunctions(
-	functions: Array<{
-		node: ts.Node;
-		info: null;
-	}>,
-	rawDependencies: Map<string, string[]>,
-	sourceFile: ts.SourceFile,
-): Array<{
-	node: ts.Node;
-	info: null;
-}> {
-	// Clone to avoid mutating caller's graph (findAndRemoveLeafFunctions mutates)
-	const dependencies = new Map(
-		[...rawDependencies].map(([k, v]): [string, string[]] => [k, [...v]]),
-	);
-	const sourceOrder = new Map<string, number>();
-	const nameToFunc = new Map<
-		string,
-		{
-			node: ts.Node;
-			info: null;
-		}
-	>();
-	for (const [i, f] of functions.entries()) {
-		const name = extractFunctionName(f.node, sourceFile);
-		if (name) {
-			sourceOrder.set(name, i);
-			nameToFunc.set(name, f);
-		}
-	}
-	// Remove leaf functions (those with no outgoing edges) to break cycles
-	const leafNames = findAndRemoveLeafFunctions(dependencies, sourceOrder);
-	const leafFunctions = leafNames
-		.map((name) => nameToFunc.get(name))
-		.filter(
-			(
-				f,
-			): f is {
-				node: ts.Node;
-				info: null;
-			} => f !== undefined,
-		);
-	const sorted = sortTopologically(dependencies, sourceOrder).reverse();
-	const sortedFunctions = sorted
-		.map((name) => nameToFunc.get(name))
-		.filter(
-			(
-				f,
-			): f is {
-				node: ts.Node;
-				info: null;
-			} => f !== undefined,
-		);
-	// Append leaf functions in their original order
-	return [...sortedFunctions, ...leafFunctions];
+function positionKey(occurrence: number, trimmed: string): string {
+	return `${occurrence}:${trimmed}`;
 }
 function isFunctionSignature(trimmed: string): boolean {
 	return (
 		trimmed.startsWith("function ") || (trimmed.startsWith("const ") && trimmed.includes("=>"))
 	);
 }
-export interface PipelineResult {
-	analysisResults: AnalysisResult[];
-	fixResults: FixResult[];
-}
-const defaultPrinter = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
+export { reorderTopLevelOnly } from "./stepdown-top-level-reorder";

@@ -152,11 +152,7 @@ export function boundedPreview(original: string, fixed: string, maxLines = 40): 
 	}
 	return out.join("\n");
 }
+/** Fix command fails only when a result carries errors; clean no-ops are success. */
 export function fixResultsIndicateFailure(results: FixResult[]): boolean {
-	return results.some((r) => {
-		if (r.errors.length > 0) return true;
-		if (r.fixed) return false;
-		if (r.originalContent.length === 0) return false;
-		return r.originalContent === r.fixedContent;
-	});
+	return results.some((r) => r.errors.length > 0);
 }

@@ -1,10 +1,17 @@
-import { test } from "bun:test";
+import { beforeAll, test } from "bun:test";
+import { registerDefaultRules } from "../src/register-default-rules";
+import { clear } from "../src/registry";
 import { ACTIONABLE_VIOLATION_TYPES, getViolationFixture } from "../src/violation-coverage";
 import { assertFixReducesViolations, fixConfig } from "./helpers";
 
-test("uj1: each actionable violation type has fix coverage", async () => {
+beforeAll(() => {
+	clear();
+	registerDefaultRules();
+});
+
+test("uj1: each actionable violation type has fix coverage", () => {
 	for (const violationType of ACTIONABLE_VIOLATION_TYPES) {
 		const fixture = getViolationFixture(violationType);
-		await assertFixReducesViolations(fixture, fixConfig, violationType);
+		assertFixReducesViolations(fixture, fixConfig, violationType);
 	}
 });

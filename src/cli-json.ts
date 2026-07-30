@@ -10,6 +10,7 @@ export function sanitizeForJson(
 		...r,
 		dependencyGraph: includeGraph ? dependencyGraphToRecord(r.dependencyGraph) : undefined,
 		violations: r.violations.map((v) => ({
+			kind: v.kind,
 			file: r.file,
 			function: {
 				...v.function,
@@ -23,6 +24,7 @@ export function sanitizeForJson(
 			callSite: v.callSite,
 		})),
 		nestedFunctionViolations: r.nestedFunctionViolations.map((v) => ({
+			kind: v.kind,
 			file: r.file,
 			parent: {
 				...v.parent,
@@ -36,10 +38,7 @@ export function sanitizeForJson(
 		})),
 	}));
 }
-function dependencyGraphToRecord(
-	graph: Map<string, string[]> | undefined,
-): Record<string, string[]> | undefined {
-	if (!graph) return undefined;
+function dependencyGraphToRecord(graph: Map<string, string[]>): Record<string, string[]> {
 	return Object.fromEntries(graph.entries());
 }
 function stripAnonymousScope(parentFunction: string | null): string | null {

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import ts from "typescript";
 import {
+	buildCallGraph,
 	buildDependencyGraph,
 	callGraphToDependencyMap,
 	extractDependenciesFor,
@@ -16,10 +17,8 @@ import {
 } from "../src/ast-node-visitors";
 import {
 	detectCircularDependencies,
-	filterOutCyclicFunctions,
 	findAndRemoveLeafFunctions,
 	topologicalSort,
-	visitDependencyNode,
 } from "../src/graph-algorithms";
 import type { FunctionInfo } from "../src/types";
 
@@ -28,17 +27,29 @@ const parseCode = (code: string) =>
 
 // ============ ast-graph-builder tests ============
 
+function requireStatement(sourceFile: ts.SourceFile, index: number): ts.Statement {
+	const stmt = sourceFile.statements[index];
+	if (!stmt) {
+		throw new Error(`Expected statement at index ${index}`);
+	}
+	return stmt;
+}
+
 test("extractFunctionNames extracts all function names from FunctionInfo array", () => {
 	const funcs: FunctionInfo[] = [
 		{
 			name: "foo",
+			kind: "declaration",
+			isExported: false,
 			parentFunction: null,
-			position: { start: 0, line: 1 },
+			position: { start: 0, end: 10, line: 1, column: 0 },
 		},
 		{
 			name: "bar",
+			kind: "declaration",
+			isExported: false,
 			parentFunction: null,
-			position: { start: 10, line: 2 },
+			position: { start: 10, end: 20, line: 2, column: 0 },
 		},
 	];
 
@@ -51,7 +62,7 @@ test("extractFunctionNames extracts all function names from FunctionInfo array",
 test("extractFunctionName extracts from FunctionDeclaration", () => {
 	const code = "function hello() { return 'world'; }";
 	const sourceFile = parseCode(code);
-	const funcNode = sourceFile.statements[0];
+	const funcNode = requireStatement(sourceFile, 0);
 
 	const name = extractFunctionName(funcNode, sourceFile);
 	expect(name).toBe("hello");
@@ -60,7 +71,7 @@ test("extractFunctionName extracts from FunctionDeclaration", () => {
 test("extractFunctionName extracts from arrow function variable statement", () => {
 	const code = "const myFunc = () => 'test';";
 	const sourceFile = parseCode(code);
-	const varNode = sourceFile.statements[0];
+	const varNode = requireStatement(sourceFile, 0);
 
 	const name = extractFunctionName(varNode, sourceFile);
 	expect(name).toBe("myFunc");
@@ -69,7 +80,7 @@ test("extractFunctionName extracts from arrow function variable statement", () =
 test("extractFunctionName returns name even for non-function variable (delegates filtering to caller)", () => {
 	const code = "const x = 42;";
 	const sourceFile = parseCode(code);
-	const varNode = sourceFile.statements[0];
+	const varNode = requireStatement(sourceFile, 0);
 
 	const name = extractFunctionName(varNode, sourceFile);
 	// extractFunctionName returns the identifier name; caller is responsible for checking if it's a function
@@ -80,7 +91,7 @@ test("buildDependencyGraph creates mapping of functions to their dependencies", 
 	const code = `function a() { b(); }
 function b() { return 'done'; }`;
 	const sourceFile = parseCode(code);
-	const funcNodes = sourceFile.statements.map((s) => ({ node: s, info: null }));
+	const funcNodes = sourceFile.statements.map((s) => ({ node: s }));
 
 	const graph = buildDependencyGraph(funcNodes, sourceFile);
 
@@ -88,6 +99,19 @@ function b() { return 'done'; }`;
 	expect(graph.functionNames.has("b")).toBe(true);
 	expect(graph.dependencies.get("a")).toEqual(["b"]);
 	expect(graph.dependencies.get("b")).toEqual([]);
+});
+
+test("buildCallGraph records call-site positions", () => {
+	const code = `function a() { b(); }
+function b() { return 'done'; }`;
+	const sourceFile = parseCode(code);
+	const callGraph = buildCallGraph(new Set(["a", "b"]), sourceFile);
+	const sites = callGraph.get("a") ?? [];
+	expect(sites).toHaveLength(1);
+	expect(sites[0]?.calledFunction).toBe("b");
+	expect(sites[0]?.callSite.line).toBe(1);
+	expect(sites[0]?.callSite.column).toBeGreaterThan(0);
+	expect(callGraph.get("b")).toEqual([]);
 });
 
 test("extractDependenciesFor finds all called functions in a block", () => {
@@ -100,12 +124,12 @@ function a() {}
 function b() {}
 function c() {}`;
 	const sourceFile = parseCode(code);
-	const mainNode = sourceFile.statements[0];
+	const mainNode = requireStatement(sourceFile, 0);
 
 	const funcNames = new Map([
-		["a", sourceFile.statements[1]],
-		["b", sourceFile.statements[2]],
-		["c", sourceFile.statements[3]],
+		["a", requireStatement(sourceFile, 1)],
+		["b", requireStatement(sourceFile, 2)],
+		["c", requireStatement(sourceFile, 3)],
 	]);
 
 	const deps = extractDependenciesFor(mainNode, sourceFile, funcNames);
@@ -119,9 +143,9 @@ test("extractDependenciesFor deduplicates dependencies", () => {
 }
 function a() {}`;
 	const sourceFile = parseCode(code);
-	const mainNode = sourceFile.statements[0];
+	const mainNode = requireStatement(sourceFile, 0);
 
-	const funcNames = new Map([["a", sourceFile.statements[1]]]);
+	const funcNames = new Map([["a", requireStatement(sourceFile, 1)]]);
 
 	const deps = extractDependenciesFor(mainNode, sourceFile, funcNames);
 	expect(deps).toEqual(["a"]);
@@ -224,13 +248,15 @@ test("findAndRemoveLeafFunctions identifies and removes leaves", () => {
 		["c", 2],
 	]);
 
-	const leaves = findAndRemoveLeafFunctions(deps, sourceOrder);
+	const { leafNames, remaining } = findAndRemoveLeafFunctions(deps, sourceOrder);
 
-	expect(leaves).toContain("b");
-	expect(leaves).toContain("c");
-	expect(deps.has("b")).toBe(false);
-	expect(deps.has("c")).toBe(false);
-	expect(deps.has("a")).toBe(true);
+	expect(leafNames).toContain("b");
+	expect(leafNames).toContain("c");
+	expect(deps.has("b")).toBe(true);
+	expect(deps.has("c")).toBe(true);
+	expect(remaining.has("b")).toBe(false);
+	expect(remaining.has("c")).toBe(false);
+	expect(remaining.has("a")).toBe(true);
 });
 
 test("findAndRemoveLeafFunctions returns leaves in source order", () => {
@@ -245,10 +271,10 @@ test("findAndRemoveLeafFunctions returns leaves in source order", () => {
 		["b", 2],
 	]);
 
-	const leaves = findAndRemoveLeafFunctions(deps, sourceOrder);
+	const { leafNames } = findAndRemoveLeafFunctions(deps, sourceOrder);
 
-	expect(leaves[0]).toBe("c"); // c before b
-	expect(leaves[1]).toBe("b");
+	expect(leafNames[0]).toBe("c"); // c before b
+	expect(leafNames[1]).toBe("b");
 });
 
 test("detectCircularDependencies finds simple cycle", () => {
@@ -302,43 +328,6 @@ test("detectCircularDependencies ignores acyclic graphs", () => {
 	const cycles = detectCircularDependencies(callGraph, functionNames);
 
 	expect(cycles.length).toBe(0);
-});
-
-test("filterOutCyclicFunctions removes functions in cycles", () => {
-	const functionNames = new Set(["a", "b", "c", "d"]);
-	const cycles = [["a", "b"]];
-
-	const acyclic = filterOutCyclicFunctions(functionNames, cycles);
-
-	expect(acyclic.has("a")).toBe(false);
-	expect(acyclic.has("b")).toBe(false);
-	expect(acyclic.has("c")).toBe(true);
-	expect(acyclic.has("d")).toBe(true);
-});
-
-test("visitDependencyNode performs DFS visit and adds to result", () => {
-	const context = {
-		dependencies: new Map([
-			["a", ["b"]],
-			["b", ["c"]],
-			["c", []],
-		]),
-		visited: new Set<string>(),
-		temp: new Set<string>(),
-		result: [] as string[],
-		sourceOrder: new Map([
-			["a", 0],
-			["b", 1],
-			["c", 2],
-		]),
-	};
-
-	visitDependencyNode("a", context);
-
-	expect(context.visited.has("a")).toBe(true);
-	expect(context.result).toContain("a");
-	expect(context.result).toContain("b");
-	expect(context.result).toContain("c");
 });
 
 // ============ ast-node-visitors tests ============
@@ -396,8 +385,12 @@ export { foo };`;
 
 	const reconstructed = reconstructStatements(categorized, reordered);
 
+	const firstNode = reconstructed[0];
+	if (!firstNode) {
+		throw new Error("Expected reconstructed statements");
+	}
 	// First should be imports
-	expect(ts.isImportDeclaration(reconstructed[0])).toBe(true);
+	expect(ts.isImportDeclaration(firstNode)).toBe(true);
 	// Last should be exports
 	const lastNode = reconstructed.at(-1);
 	expect(lastNode && ts.isExportDeclaration(lastNode)).toBe(true);

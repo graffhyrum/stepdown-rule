@@ -18,7 +18,7 @@ export interface CallSite {
 }
 
 export interface StepdownViolation {
-	file: string;
+	kind: "stepdown";
 	function: FunctionInfo;
 	dependency: FunctionInfo;
 	message: string;
@@ -26,7 +26,7 @@ export interface StepdownViolation {
 }
 
 export interface NestedFunctionViolation {
-	file: string;
+	kind: "nested";
 	parent: FunctionInfo;
 	nested: FunctionInfo;
 	message: string;
@@ -39,7 +39,7 @@ export interface AnalysisResult {
 	circularDependencies: string[][];
 	totalFunctions: number;
 	/** Top-level function -> callees (for fixer to use same view as analyzer) */
-	dependencyGraph?: Map<string, string[]>;
+	dependencyGraph: Map<string, string[]>;
 }
 
 export interface FixResult {
