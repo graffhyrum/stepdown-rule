@@ -4,25 +4,57 @@ A TypeScript AST analyzer that enforces the stepdown rule for function organizat
 
 ## Installation
 
+### Trust model
+
+- **Binaries** publish only on tagged GitHub Releases (`v*`) with `SHA256SUMS`.
+- **Installers** (`install.sh` / `install.ps1`) download the Release asset and verify SHA256 **before** copying/executing the binary. Mismatch → abort.
+- **Preferred path**: download the installer from a Release asset, inspect it, then run locally. That separates “fetch script” from “run script”.
+- **Pipe-to-shell** (`curl|bash`, `irm|iex`) executes remote content in one step — higher supply-chain risk. Use only if you accept trusting the URL host at fetch time.
+- No GPG/cosign signatures yet; integrity is checksum-based against GitHub Release assets.
+
+Channels (Release vs Pages): [docs/install-channels.md](docs/install-channels.md).
+
 ### From GitHub Releases (recommended)
 
-Standalone binaries (~98 MiB, Bun runtime embedded — no Bun install required at runtime). Tagged releases (`v*`) publish linux/darwin (x64 + arm64) and windows-x64.
+Standalone binaries (~98 MiB, Bun runtime embedded — no Bun install required at runtime). Tagged releases publish linux/darwin (x64 + arm64) and windows-x64, plus installers and `SHA256SUMS`.
+
+#### Preferred (download → inspect → run)
 
 **Unix (macOS / Linux):**
 
 ```shell
-curl -fsSL https://graffhyrum.github.io/stepdown-rule/install | bash
+curl -fsSL -o install.sh https://github.com/graffhyrum/stepdown-rule/releases/latest/download/install.sh
+less install.sh   # review, then:
+bash install.sh
 ```
 
 **Windows (PowerShell):**
 
 ```powershell
+Invoke-WebRequest -Uri https://github.com/graffhyrum/stepdown-rule/releases/latest/download/install.ps1 -OutFile install.ps1
+# review install.ps1, then:
+powershell -File .\install.ps1
+```
+
+Pin a version: `VERSION=v0.2.0 bash install.sh` or `$env:VERSION = 'v0.2.0'; powershell -File .\install.ps1`.
+
+#### Convenience pipe-to-shell (higher risk)
+
+> Warning: pipes remote script straight into a shell. Prefer the download → inspect → run flow above.
+
+**Unix** (Pages short URL, same script as the tagged Release):
+
+```shell
+curl -fsSL https://graffhyrum.github.io/stepdown-rule/install | bash
+```
+
+**Windows:**
+
+```powershell
 irm https://graffhyrum.github.io/stepdown-rule/install.ps1 | iex
 ```
 
-Pin a version with `VERSION=v0.2.0` (bash) or `$env:VERSION = 'v0.2.0'` (PowerShell). Installers pull release binaries and verify `SHA256SUMS`.
-
-> Short URLs are served via GitHub Pages (`pages` workflow). Repo Settings → Pages → Source: **GitHub Actions** (once).
+Pages deploys only on `v*` tags (not `main` HEAD), so short URLs stay aligned with Release-attached installers. Repo Settings → Pages → Source: **GitHub Actions** (once).
 
 Then:
 
