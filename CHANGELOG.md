@@ -1,5 +1,25 @@
 # @stepdown/analyzer
 
+## 0.3.0
+
+### Minor Changes
+
+- 69a6958: GitHub Release multi-target minify compile + Pages install one-liners (install.sh / install.ps1).
+- d22d0c0: Prefer download-inspect-run install path; pin Pages installers to release tags; document trust model and channels.
+- a5ffee9: Extract analyze/fix Pipeline and rule detectors; add --format and --dry-run CLI options with reporter port and golden tests.
+
+### Patch Changes
+
+- 9f373e0: Fix Linux checkout by making AGENTS.md a regular file; drop CLAUDE.md symlink and sync-agents duplication.
+- 602f33d: Document simplify-review remediations and unilateral bead-deferral process failure.
+- 63dfc13: Register default rules in rule-fix-coverage tests so coverage runs see stepdown/nested.
+- 4fc3f56: Commit SpecStory session history for agent effectiveness meta-analysis.
+- 13906d8: Sync beads issues (restore deferred tickets, add typecheck scripts bead) and ignore write.lock/\*.tmp.
+- ba6b5f0: Typecheck scripts and tests via tsconfig.check.json.
+- 7b064c6: Cursor stop hook runs vet-stop and returns followup_message on failure instead of raw non-zero exit.
+- 7f02283: Fix Windows FileService globs/ignores via posix path normalization and post-filter.
+- dfc8c95: Windows-safe tooling: LF gitattributes, portable remove-buildinfo/sync-agents, bin→cli.js, Cursor stop→vet hook.
+
 ## 0.2.0
 
 ### Minor Changes
