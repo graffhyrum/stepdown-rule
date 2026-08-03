@@ -12,7 +12,6 @@ beforeAll(() => {
 
 const rulesPipelineConfig: Config = {
 	...defaultConfig,
-	fix: true,
 	enabledRuleIds: ["stepdown"],
 };
 
@@ -62,7 +61,7 @@ export function main(): string { return helper(); }`;
 });
 
 test("rule-fix: no enabledRuleIds uses all registered rules", () => {
-	const defaultRulesConfig = { ...defaultConfig, fix: true };
+	const defaultRulesConfig = { ...defaultConfig };
 	const { result, fixedContent, after } = fixCode(violatingCode, defaultRulesConfig);
 	expect(result.fixed, "Should fix the violation via rule pipeline").toBe(true);
 	expect(result.errors).toHaveLength(0);
@@ -72,7 +71,7 @@ test("rule-fix: no enabledRuleIds uses all registered rules", () => {
 
 test("integration: fixFiles rules pipeline writes to disk", async () => {
 	await withTempFile(violatingCode, async (file) => {
-		const [fixResult] = await fixFiles([file], rulesPipelineConfig);
+		const [fixResult] = await fixFiles({ patterns: [file], config: rulesPipelineConfig });
 		expect(fixResult?.fixed, "Should fix the violation").toBe(true);
 		const fixed = await Bun.file(file).text();
 		expect(analyzeCode(fixed).violations.length).toBe(0);

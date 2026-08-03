@@ -13,7 +13,7 @@ Efficient pipeline: **parse AST once per file**, run all enabled rules' analyses
 
 Chosen name: **`Pipeline`** (not `RunPipeline`). Docs historically used `RunPipeline` as a use-case label; the concrete export is `Pipeline.run`. Mode is `"analyze" | "fix"`. Deps: `fileService`, optional `registry`, `config`, patterns.
 
-As of stepdown-5x2.4.2, `Pipeline.run` owns the per-file Resolved→Parsed→Analyzed→Fixed loop. `analyzeFiles` / `fixFiles` / fixer `runPipeline` are thin facades over `Pipeline.run`.
+As of stepdown-5x2.4.2, `Pipeline.run` owns the per-file Resolved→Parsed→Analyzed→Fixed loop. `analyzeFiles` / `fixFiles` / fixer `runPipeline` are thin facades over `Pipeline.run`. Mode (`"analyze" | "fix"`) is the only analyze/fix switch — Config has no `fix` flag. Rule application lives in `src/rule-fix.ts` so Pipeline does not import the fixer facades (no pipeline↔fixer cycle). `fixParsedFile` is deprecated; prefer `fixFileWithRules`.
 
 ---
 

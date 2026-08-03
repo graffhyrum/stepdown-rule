@@ -77,7 +77,7 @@ export async function runHumanFix(
 		});
 		return;
 	}
-	const config: Config = { ...built.config, fix: true };
+	const config: Config = built.config;
 	const fileService = new FileService({ ignore: config.ignore });
 	const resolved = await resolveFilesOrReport(fileService, patterns, reporter, "fix");
 	if (!resolved) return;

@@ -1,6 +1,6 @@
 import { analyzeWithRules } from "./analyzer";
-import { fixFileWithRules } from "./fixer";
 import { getEnabled, type RuleRegistry } from "./registry";
+import { fixFileWithRules } from "./rule-fix";
 import type { ViolationRule } from "./rule-context";
 import type { IFileService } from "./services/types";
 import type { AnalysisResult, Config, FixResult } from "./types";
@@ -25,6 +25,7 @@ export interface PipelineRunOptions {
 /**
  * Canonical analyze/fix entry (`src/pipeline.ts`).
  * Owns Resolved→Parsed→Analyzed→Fixed per file.
+ * Mode is the only analyze/fix switch — config has no fix flag.
  */
 export const Pipeline = {
 	async run(options: PipelineRunOptions): Promise<PipelineResult> {
@@ -37,7 +38,7 @@ export const Pipeline = {
 		const shouldFix = mode === "fix";
 		const analysisResults: AnalysisResult[] = [];
 		const fixResults: FixResult[] = [];
-
+		// Sequential: preserve order and avoid partial multi-file writes on hard failures.
 		for (const filePath of files) {
 			const { analysisResult, fixResult } = await processOneFile({
 				filePath,
@@ -51,7 +52,6 @@ export const Pipeline = {
 				fixResults.push(fixResult);
 			}
 		}
-
 		return { analysisResults, fixResults };
 	},
 };
@@ -72,11 +72,16 @@ async function processOneFile(params: {
 	if (!shouldFix) {
 		return { analysisResult, fixResult: null };
 	}
+	if (
+		analysisResult.violations.length === 0 &&
+		analysisResult.nestedFunctionViolations.length === 0
+	) {
+		return { analysisResult, fixResult: noOpFixResult(filePath, parsedFile.content) };
+	}
 	try {
-		const content = await service.readFile(filePath);
 		const result = fixFileWithRules({
 			filePath,
-			originalContent: content,
+			originalContent: parsedFile.content,
 			enabledRules,
 			service,
 		});
@@ -88,14 +93,18 @@ async function processOneFile(params: {
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		return {
 			analysisResult,
-			fixResult: {
-				file: filePath,
-				fixed: false,
-				originalContent: "",
-				fixedContent: "",
-				reordered: 0,
-				errors: [errorMessage],
-			},
+			fixResult: noOpFixResult(filePath, parsedFile.content, [errorMessage]),
 		};
 	}
+}
+
+function noOpFixResult(filePath: string, content: string, errors: string[] = []): FixResult {
+	return {
+		file: filePath,
+		fixed: false,
+		originalContent: content,
+		fixedContent: content,
+		reordered: 0,
+		errors,
+	};
 }

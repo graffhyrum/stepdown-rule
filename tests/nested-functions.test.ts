@@ -23,33 +23,38 @@ test("detects nested function before logic when not referenced", async () => {
 	expect(v?.message).toContain("should appear after all logic");
 });
 
-test("does not flag nested function after return", async () => {
-	const results = await analyzeFiles(["fixtures/test-nested-correct.ts"], defaultConfig);
-	expect(results[0]?.nestedFunctionViolations.length).toBe(0);
-});
-
-test("does not flag nested function when referenced in return", () => {
-	const code = `function parent() {
+const noNestedFlagCases: Array<{ name: string; load: () => Promise<string> | string }> = [
+	{
+		name: "nested function after return",
+		load: () => Bun.file("fixtures/test-nested-correct.ts").text(),
+	},
+	{
+		name: "nested function referenced in return",
+		load: () => `function parent() {
 	function helper() { return "I help"; }
 	return helper();
-}`;
-	expect(analyzeCode(code).nestedFunctionViolations.length).toBe(0);
-});
+}`,
+	},
+	{
+		name: "nested arrow when referenced",
+		load: () => Bun.file("fixtures/test-nested-arrow.ts").text(),
+	},
+	{
+		name: "multiple nested when referenced",
+		load: () => Bun.file("fixtures/test-nested-multiple.ts").text(),
+	},
+	{
+		name: "nested referenced in logic",
+		load: () => Bun.file("fixtures/test-nested-no-return.ts").text(),
+	},
+];
 
-test("does not flag nested arrow when referenced", async () => {
-	const results = await analyzeFiles(["fixtures/test-nested-arrow.ts"], defaultConfig);
-	expect(results[0]?.nestedFunctionViolations.length).toBe(0);
-});
-
-test("does not flag multiple nested when referenced", async () => {
-	const results = await analyzeFiles(["fixtures/test-nested-multiple.ts"], defaultConfig);
-	expect(results[0]?.nestedFunctionViolations.length).toBe(0);
-});
-
-test("does not flag nested when referenced in logic", async () => {
-	const results = await analyzeFiles(["fixtures/test-nested-no-return.ts"], defaultConfig);
-	expect(results[0]?.nestedFunctionViolations.length).toBe(0);
-});
+for (const { name, load } of noNestedFlagCases) {
+	test(`does not flag ${name}`, async () => {
+		const code = await load();
+		expect(analyzeCode(code).nestedFunctionViolations).toHaveLength(0);
+	});
+}
 
 test("db8/aka: functions inside .derive() callback are scoped (no false top-level violations)", () => {
 	const code = `
@@ -62,42 +67,49 @@ const sessionPlugin = { derive: (fn: () => unknown) => fn() }.derive(() => {
 	expect(analyzeCode(code).violations.length).toBe(0);
 });
 
-test("5x2.7: lone nested-before-logic FunctionDeclaration converges in one pass", async () => {
-	const code = await Bun.file("fixtures/test-nested-lone-before-logic.ts").text();
-	const before = analyzeCode(code);
-	expect(before.nestedFunctionViolations.length).toBeGreaterThan(0);
-	const { after, fixedContent } = fixCode(code);
-	expect(totalViolations(after)).toBe(0);
-	expect(fixedContent.indexOf("console.log")).toBeLessThan(fixedContent.indexOf("function helper"));
-});
-
-test("5x2.7: lone nested-before-logic const-arrow converges in one pass", async () => {
-	const code = await Bun.file("fixtures/test-nested-lone-arrow-before-logic.ts").text();
-	const before = analyzeCode(code);
-	expect(before.nestedFunctionViolations.length).toBeGreaterThan(0);
-	const { after, fixedContent } = fixCode(code);
-	expect(totalViolations(after)).toBe(0);
-	expect(fixedContent.indexOf("console.log")).toBeLessThan(fixedContent.indexOf("const helper"));
-});
-
-test("5x2.7: ExpressionStatement-wrapped call nested-before-logic converges", async () => {
-	const code = await Bun.file("fixtures/test-nested-expr-stmt-before-logic.ts").text();
-	const before = analyzeCode(code);
-	expect(before.nestedFunctionViolations.length).toBeGreaterThan(0);
-	const { after, fixedContent } = fixCode(code);
-	expect(totalViolations(after)).toBe(0);
-	expect(fixedContent.indexOf("console.log")).toBeLessThan(fixedContent.indexOf("function helper"));
-});
-
-test("5x2.7: VariableStatement-wrapped call nested-before-logic converges", () => {
-	const code = `const run = (name: string, fn: () => void) => fn();
+const convergeCases: Array<{
+	name: string;
+	load: () => Promise<string> | string;
+	logicNeedle: string;
+	helperNeedle: string;
+}> = [
+	{
+		name: "lone nested FunctionDeclaration",
+		load: () => Bun.file("fixtures/test-nested-lone-before-logic.ts").text(),
+		logicNeedle: "console.log",
+		helperNeedle: "function helper",
+	},
+	{
+		name: "lone nested const-arrow",
+		load: () => Bun.file("fixtures/test-nested-lone-arrow-before-logic.ts").text(),
+		logicNeedle: "console.log",
+		helperNeedle: "const helper",
+	},
+	{
+		name: "ExpressionStatement-wrapped call",
+		load: () => Bun.file("fixtures/test-nested-expr-stmt-before-logic.ts").text(),
+		logicNeedle: "console.log",
+		helperNeedle: "function helper",
+	},
+	{
+		name: "VariableStatement-wrapped call",
+		load: () => `const run = (name: string, fn: () => void) => fn();
 const suite = run("suite", () => {
   function helper() { return 42; }
   console.log("logic");
-});`;
-	const before = analyzeCode(code);
-	expect(before.nestedFunctionViolations.length).toBeGreaterThan(0);
-	const { after, fixedContent } = fixCode(code);
-	expect(totalViolations(after)).toBe(0);
-	expect(fixedContent.indexOf("console.log")).toBeLessThan(fixedContent.indexOf("function helper"));
-});
+});`,
+		logicNeedle: "console.log",
+		helperNeedle: "function helper",
+	},
+];
+
+for (const { name, load, logicNeedle, helperNeedle } of convergeCases) {
+	test(`5x2.7: ${name} converges in one pass`, async () => {
+		const code = await load();
+		const before = analyzeCode(code);
+		expect(before.nestedFunctionViolations.length).toBeGreaterThan(0);
+		const { after, fixedContent } = fixCode(code);
+		expect(totalViolations(after)).toBe(0);
+		expect(fixedContent.indexOf(logicNeedle)).toBeLessThan(fixedContent.indexOf(helperNeedle));
+	});
+}

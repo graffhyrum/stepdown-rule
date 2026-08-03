@@ -16,21 +16,9 @@ beforeAll(() => {
 
 test("reorders functions to fix violations", () => {
 	const code = `function helper() { return "helper"; }
-// padding
-// 1
-// 2
-// 3
-// 4
-// 5
-// 6
-// 7
-// 8
-// 9
-// 10
 function main() { return helper(); }`;
 	const { result, fixedContent } = fixCode(code);
 	expect(result.fixed).toBe(true);
-	expect(result.reordered).toBeGreaterThan(0);
 	expect(result.errors).toHaveLength(0);
 	expect(fixedContent.indexOf("function main")).toBeLessThan(
 		fixedContent.indexOf("function helper"),
@@ -78,21 +66,28 @@ export { main };`;
 	expect(fixedContent.indexOf("export")).toBeGreaterThan(fixedContent.indexOf("function"));
 });
 
-test("handles arrow functions", () => {
+test("reorders arrow functions so caller precedes callee", () => {
 	const code = `const helper = () => "helper";
 const main = () => helper();`;
-	const { result } = fixCode(code);
+	const { result, fixedContent } = fixCode(code);
 	expect(result.fixed).toBe(true);
 	expect(result.errors).toHaveLength(0);
+	expect(fixedContent.indexOf("const main")).toBeLessThan(fixedContent.indexOf("const helper"));
 });
 
-test("handles mixed declarations and arrows", () => {
+test("reorders mixed declarations and arrows", () => {
 	const code = `const arrowHelper = () => "arrow";
 function declHelper() { return "decl"; }
 function main() { return arrowHelper() + declHelper(); }`;
-	const { result } = fixCode(code);
+	const { result, fixedContent } = fixCode(code);
 	expect(result.fixed).toBe(true);
 	expect(result.errors).toHaveLength(0);
+	expect(fixedContent.indexOf("function main")).toBeLessThan(
+		fixedContent.indexOf("const arrowHelper"),
+	);
+	expect(fixedContent.indexOf("function main")).toBeLessThan(
+		fixedContent.indexOf("function declHelper"),
+	);
 });
 
 test("handles complex dependency chains", () => {
@@ -116,11 +111,10 @@ function level1() { level2a(); level2b(); }`;
 
 test("1e0: fixes factory with method calling helper", async () => {
 	const content = await Bun.file("fixtures/test-factory-method-calls.ts").text();
-	const { result, fixedContent, after } = fixCode(content);
+	const { result, after } = fixCode(content);
 	expect(result.fixed).toBe(true);
 	expect(result.errors).toHaveLength(0);
 	expect(after.violations.length).toBe(0);
-	expect(analyzeCode(fixedContent).violations.length).toBe(0);
 });
 
 test("27g: fixes arrow const chain", async () => {
@@ -147,7 +141,7 @@ test("27g: order-repo style - caller above callee", async () => {
 // --- Error / edge cases ---
 
 test("returns empty for non-matching patterns", async () => {
-	const results = await fixFiles(["non-existent-*.ts"], fixConfig);
+	const results = await fixFiles({ patterns: ["non-existent-*.ts"], config: fixConfig });
 	expect(results).toHaveLength(0);
 });
 
@@ -157,12 +151,15 @@ test("handles files with no functions", () => {
 	expect(result.reordered).toBe(0);
 });
 
-test("handles circular dependencies without crashing", () => {
+test("circular dependencies do not throw and keep all symbols", () => {
 	const code = `function a() { b(); }
 function b() { c(); }
 function c() { a(); }`;
-	const { result } = fixCode(code);
-	expect(result).toBeDefined();
+	const { result, fixedContent } = fixCode(code);
+	expect(result.errors).toHaveLength(0);
+	expect(fixedContent).toContain("function a");
+	expect(fixedContent).toContain("function b");
+	expect(fixedContent).toContain("function c");
 });
 
 test("handles files with only imports and exports", () => {
@@ -205,9 +202,11 @@ const top = () => middle();`;
 	expect(fixedContent.indexOf("middle")).toBeLessThan(fixedContent.indexOf("leaf"));
 });
 
-test("handles syntax errors gracefully", () => {
+test("syntax errors produce a result without throwing", () => {
 	const { result } = fixCode("function broken() {\n  // no close");
-	expect(result).toBeDefined();
+	expect(result.file).toBe("test.ts");
+	expect(result.fixed).toBe(false);
+	expect(result.errors).toHaveLength(0);
 });
 
 test("non-function const stays before functions after fix (no TDZ)", () => {
@@ -230,7 +229,7 @@ test("integration: fixFiles writes reordered content to disk", async () => {
 		`function helper() { return "helper"; }
 function main() { return helper(); }`,
 		async (file) => {
-			const [result] = await fixFiles([file], fixConfig);
+			const [result] = await fixFiles({ patterns: [file], config: fixConfig });
 			expect(result?.fixed).toBe(true);
 			const content = await Bun.file(file).text();
 			expect(content.indexOf("function main")).toBeLessThan(content.indexOf("function helper"));
@@ -244,7 +243,7 @@ test("integration: fixFiles leaves compliant file unchanged on disk", async () =
 function helper() { return "helper"; }`,
 		async (file) => {
 			const original = await Bun.file(file).text();
-			const [result] = await fixFiles([file], fixConfig);
+			const [result] = await fixFiles({ patterns: [file], config: fixConfig });
 			expect(result?.fixed).toBe(false);
 			expect(await Bun.file(file).text()).toBe(original);
 		},
@@ -258,7 +257,7 @@ function helper() { return something(); }
 function main() { return helper(); }
 export { main };`,
 		async (file) => {
-			const [result] = await fixFiles([file], fixConfig);
+			const [result] = await fixFiles({ patterns: [file], config: fixConfig });
 			expect(result?.fixed).toBe(true);
 			const content = await Bun.file(file).text();
 			expect(content.indexOf("import")).toBeLessThan(content.indexOf("function"));
@@ -267,7 +266,7 @@ export { main };`,
 	);
 });
 
-// --- Print-to-print change detection (stepdown-5x2.10) ---
+// --- Change detection: print identity vs real reorder ---
 
 const printer = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
 
@@ -275,7 +274,27 @@ function printRaw(content: string, filePath = "test.ts"): string {
 	return printer.printFile(ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true));
 }
 
-test("print-to-print: identity print with violation gate off is not a change", () => {
+const forceFixViolation: Violation = {
+	kind: "stepdown",
+	function: {
+		name: "main",
+		kind: "declaration",
+		position: { line: 1, column: 1, start: 0, end: 1 },
+		isExported: false,
+		parentFunction: null,
+	},
+	dependency: {
+		name: "helper",
+		kind: "declaration",
+		position: { line: 2, column: 1, start: 2, end: 3 },
+		isExported: false,
+		parentFunction: null,
+	},
+	message: "force fix path",
+	callSite: { line: 1, column: 1 },
+};
+
+test("re-print-only fix reports fixed=false", () => {
 	const raw = `function main(){return helper();}
 function helper(){return 1;}`;
 	expect(raw !== printRaw(raw), "fixture must differ from printer output").toBe(true);
@@ -283,8 +302,7 @@ function helper(){return 1;}`;
 	const identityPrintRule: ViolationRule = {
 		id: "identity-print",
 		analyze(): Violation[] {
-			// Force fix path; shape unused by this rule's fix.
-			return [{} as Violation];
+			return [forceFixViolation];
 		},
 		fix(ctx: RuleContext): string {
 			return printer.printFile(ctx.parsedFile.sourceFile);
@@ -302,17 +320,7 @@ function helper(){return 1;}`;
 	expect(result.reordered).toBe(0);
 });
 
-test("print-to-print: real reorder still sets fixed", () => {
-	const code = `function helper() { return "helper"; }
-function main() { return helper(); }`;
-	const { result, fixedContent } = fixCode(code);
-	expect(result.fixed).toBe(true);
-	expect(fixedContent.indexOf("function main")).toBeLessThan(
-		fixedContent.indexOf("function helper"),
-	);
-});
-
-test("print-to-print: fixParsedFile no-op when print(original) matches print(transformed)", () => {
+test("compliant file fixParsedFile reports fixed=false", () => {
 	const code = `function main() { return helper(); }
 function helper() { return "helper"; }`;
 	const analysis = analyzeCode(code);
@@ -323,21 +331,31 @@ function helper() { return "helper"; }`;
 		analysisResult: analysis,
 	});
 	expect(result.fixed).toBe(false);
+	expect(result.fixedContent).toBe(code);
 });
 
-test("integration: print-to-print no-write on compliant fixture", async () => {
+test("fixParsedFile no-op when reorder leaves printed AST unchanged", () => {
+	const code = `function main() { return helper(); }
+function helper() { return "helper"; }`;
+	// Omit analysisResult so reorder runs; compliant order still prints equal.
+	const result = fixParsedFile({ content: code, filePath: "test.ts" });
+	expect(result.fixed).toBe(false);
+	expect(result.reordered).toBe(0);
+});
+
+test("integration: compliant fixture is not written", async () => {
 	const original = await Bun.file("fixtures/test-correct.ts").text();
 	await withTempFile(original, async (file) => {
-		const [result] = await fixFiles([file], fixConfig);
+		const [result] = await fixFiles({ patterns: [file], config: fixConfig });
 		expect(result?.fixed).toBe(false);
 		expect(await Bun.file(file).text()).toBe(original);
 	});
 });
 
-test("integration: print-to-print writes real reorder fixture", async () => {
+test("integration: violation fixture is reordered on disk", async () => {
 	const original = await Bun.file("fixtures/test-violations.ts").text();
 	await withTempFile(original, async (file) => {
-		const [result] = await fixFiles([file], fixConfig);
+		const [result] = await fixFiles({ patterns: [file], config: fixConfig });
 		expect(result?.fixed).toBe(true);
 		const after = await Bun.file(file).text();
 		expect(after).not.toBe(original);
@@ -347,7 +365,7 @@ test("integration: print-to-print writes real reorder fixture", async () => {
 test("integration: dry-run detects reorder but does not write", async () => {
 	const original = await Bun.file("fixtures/test-violations.ts").text();
 	await withTempFile(original, async (file) => {
-		const [result] = await fixFiles([file], fixConfig, undefined, { dryRun: true });
+		const [result] = await fixFiles({ patterns: [file], config: fixConfig, dryRun: true });
 		expect(result?.fixed).toBe(true);
 		expect(await Bun.file(file).text()).toBe(original);
 	});

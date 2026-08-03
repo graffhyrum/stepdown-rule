@@ -33,7 +33,11 @@ function applyExitOverride(command: Command): void {
 	}
 }
 
-export async function runCli(argv: string[]): Promise<CliRunResult> {
+/** Capture stdout/stderr/console while running fn; restore exitCode after. */
+export async function withCapturedIo<T>(
+	fn: () => T | Promise<T>,
+	options: { noColor?: boolean } = {},
+): Promise<{ result: T; stdout: string; stderr: string; exitCode: number }> {
 	const stdoutChunks: string[] = [];
 	const stderrChunks: string[] = [];
 	const previousExitCode = process.exitCode;
@@ -46,9 +50,10 @@ export async function runCli(argv: string[]): Promise<CliRunResult> {
 
 	// Bun ignores `process.exitCode = undefined`; must assign 0 to clear.
 	process.exitCode = 0;
-	// Prefer no color; stripAnsi below still covers cached picocolors.
-	process.env.NO_COLOR = "1";
-	delete process.env.FORCE_COLOR;
+	if (options.noColor !== false) {
+		process.env.NO_COLOR = "1";
+		delete process.env.FORCE_COLOR;
+	}
 
 	console.log = (...args: unknown[]) => {
 		stdoutChunks.push(`${format(...args)}\n`);
@@ -60,17 +65,9 @@ export async function runCli(argv: string[]): Promise<CliRunResult> {
 	process.stderr.write = makeCaptureWrite(stderrChunks) as WriteFn;
 
 	try {
-		const program = createProgram();
-		applyExitOverride(program);
-		try {
-			await program.parseAsync(argv, { from: "user" });
-		} catch (error) {
-			if (!(error instanceof CommanderError)) {
-				throw error;
-			}
-			process.exitCode = error.exitCode;
-		}
+		const result = await fn();
 		return {
+			result,
 			exitCode: typeof process.exitCode === "number" ? process.exitCode : 0,
 			stdout: joinCapturedOutput(stdoutChunks),
 			stderr: joinCapturedOutput(stderrChunks),
@@ -84,6 +81,22 @@ export async function runCli(argv: string[]): Promise<CliRunResult> {
 		restoreEnvVar("NO_COLOR", previousNoColor);
 		restoreEnvVar("FORCE_COLOR", previousForceColor);
 	}
+}
+
+export async function runCli(argv: string[]): Promise<CliRunResult> {
+	const { exitCode, stdout, stderr } = await withCapturedIo(async () => {
+		const program = createProgram();
+		applyExitOverride(program);
+		try {
+			await program.parseAsync(argv, { from: "user" });
+		} catch (error) {
+			if (!(error instanceof CommanderError)) {
+				throw error;
+			}
+			process.exitCode = error.exitCode;
+		}
+	});
+	return { exitCode, stdout, stderr };
 }
 
 function isWriteCallback(v: unknown): v is (err?: Error | null) => void {

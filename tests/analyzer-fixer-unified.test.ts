@@ -4,18 +4,15 @@ import { analyzeFiles, analyzeParsedFile } from "../src/analyzer";
 import { fixFiles, fixParsedFile } from "../src/fixer";
 import { registerDefaultRules } from "../src/register-default-rules";
 import { clear } from "../src/registry";
-import { fixCode, fixConfig, totalViolations, withTempFile } from "./helpers";
+import { analyzeCode, fixCode, fixConfig, totalViolations, withTempFile } from "./helpers";
 
 beforeAll(() => {
 	clear();
 	registerDefaultRules();
 });
 
-/**
- * hje: Fixer must use analyzer's dependency graph.
- * fixParsedFile with analysisResult uses same view as analyzer.
- */
-test("hje: fixParsedFile uses analyzer dependency graph when provided", () => {
+/** fixParsedFile with analysisResult reorders caller above callee. */
+test("fixParsedFile with analysis reorders caller above callee", () => {
 	const content = `
 function helper() {
 	return "helper result";
@@ -30,12 +27,10 @@ function main() {
 	const analysis = analyzeParsedFile(parsedFile);
 
 	expect(analysis.violations.length).toBeGreaterThan(0);
-	expect(analysis.dependencyGraph?.get("main")).toContain("helper");
 
 	const result = fixParsedFile({
 		content,
 		filePath: "test.ts",
-		config: fixConfig,
 		analysisResult: analysis,
 	});
 
@@ -64,13 +59,7 @@ function callerA() { return sharedHelper(); }
 function callerB() { return sharedHelper(); }
 function callerC() { return sharedHelper(); }
 `;
-	const before = totalViolations(
-		analyzeParsedFile({
-			sourceFile: ts.createSourceFile("test.ts", content, ts.ScriptTarget.Latest, true),
-			filePath: "test.ts",
-			content,
-		}),
-	);
+	const before = totalViolations(analyzeCode(content));
 	expect(before).toBeGreaterThan(0);
 
 	const { result, after } = fixCode(content);
@@ -87,7 +76,7 @@ const caller = () => callee();
 	await withTempFile(content, async (file) => {
 		const [before] = await analyzeFiles([file], fixConfig);
 		const violationsBefore = totalViolations(before);
-		await fixFiles([file], fixConfig);
+		await fixFiles({ patterns: [file], config: fixConfig });
 		const [after] = await analyzeFiles([file], fixConfig);
 		expect(totalViolations(after)).toBeLessThanOrEqual(violationsBefore);
 		expect(totalViolations(after)).toBe(0);

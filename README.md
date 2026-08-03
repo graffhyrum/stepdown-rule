@@ -93,10 +93,11 @@ import { analyzeFiles, fixFiles } from "@stepdown/analyzer";
 import { FileService } from "@stepdown/analyzer/services/FileService";
 
 const fileService = new FileService();
-const config = { ignore: [], fix: false, json: false };
+const config = { ignore: [], json: false };
 const results = await analyzeFiles(["src/**/*.ts"], config, fileService);
+const fixes = await fixFiles({ patterns: ["src/**/*.ts"], config, fileService });
 
-console.log(results);
+console.log(results, fixes);
 ```
 
 ## Usage
@@ -149,10 +150,11 @@ import { analyzeFiles, fixFiles } from "@stepdown/analyzer";
 import { FileService } from "@stepdown/analyzer/services/FileService";
 
 const fileService = new FileService();
-const config = { ignore: [], fix: false, json: false };
+const config = { ignore: [], json: false };
 const results = await analyzeFiles(["src/**/*.ts"], config, fileService);
+const fixes = await fixFiles({ patterns: ["src/**/*.ts"], config, fileService });
 
-console.log(results);
+console.log(results, fixes);
 ```
 
 ## What is the Stepdown Rule?

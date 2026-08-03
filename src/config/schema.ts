@@ -10,7 +10,6 @@ export const FileConfigJsonSchema = FileConfigSchema.toJsonSchema();
 
 export const ConfigSchema = type({
 	ignore: ["string[]", "=", () => []],
-	fix: ["boolean", "=", false],
 	json: ["boolean", "=", false],
 	enabledRuleIds: "string[]?",
 });

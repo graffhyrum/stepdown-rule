@@ -33,60 +33,49 @@ function runFixAnalyzeLoopInMemory(code: string, maxIterations: number): void {
 	expect(prevViolations).toBe(0);
 }
 
-test("idempotent for simple violations", () => {
-	const code = `function helper() { return "helper"; }
-// padding 1-10
-// 1
-// 2
-// 3
-// 4
-// 5
-// 6
-// 7
-// 8
-// 9
-// 10
-function main() { return helper(); }`;
+function assertIdempotent(code: string, expectsChange: boolean): void {
 	const r1 = fixCode(code);
-	expect(r1.result.fixed).toBe(true);
+	expect(r1.result.fixed).toBe(expectsChange);
 	const r2 = fixCode(r1.fixedContent);
 	expect(r2.result.fixed).toBe(false);
 	expect(r2.fixedContent).toBe(r1.fixedContent);
-	const r3 = fixCode(r2.fixedContent);
-	expect(r3.result.fixed).toBe(false);
-});
+}
 
-test("idempotent for complex dependency chains", () => {
-	const code = `function level3() { return "base"; }
+const idempotentCases: Array<{ name: string; code: string; expectsChange: boolean }> = [
+	{
+		name: "simple violations",
+		code: `function helper() { return "helper"; }
+function main() { return helper(); }`,
+		expectsChange: true,
+	},
+	{
+		name: "complex dependency chains",
+		code: `function level3() { return "base"; }
 function level2a() { level3(); }
 function level2b() { level3(); }
-function level1() { level2a(); level2b(); }`;
-	const r1 = fixCode(code);
-	expect(r1.result.fixed).toBe(true);
-	const r2 = fixCode(r1.fixedContent);
-	expect(r2.result.fixed).toBe(false);
-	expect(r2.fixedContent).toBe(r1.fixedContent);
-});
-
-test("idempotent for mixed function types", () => {
-	const code = `const arrowHelper = () => "arrow";
+function level1() { level2a(); level2b(); }`,
+		expectsChange: true,
+	},
+	{
+		name: "mixed function types",
+		code: `const arrowHelper = () => "arrow";
 function declHelper() { return "decl"; }
-function main() { return arrowHelper() + declHelper(); }`;
-	const r1 = fixCode(code);
-	expect(r1.result.fixed).toBe(true);
-	const r2 = fixCode(r1.fixedContent);
-	expect(r2.result.fixed).toBe(false);
-});
+function main() { return arrowHelper() + declHelper(); }`,
+		expectsChange: true,
+	},
+	{
+		name: "already compliant",
+		code: `function main() { return helper(); }
+function helper() { return "helper"; }`,
+		expectsChange: false,
+	},
+];
 
-test("idempotent when file already complies", () => {
-	const code = `function main() { return helper(); }
-function helper() { return "helper"; }`;
-	const r1 = fixCode(code);
-	expect(r1.result.fixed).toBe(false);
-	const r2 = fixCode(r1.fixedContent);
-	expect(r2.result.fixed).toBe(false);
-	expect(r2.fixedContent).toBe(code);
-});
+for (const { name, code, expectsChange } of idempotentCases) {
+	test(`idempotent for ${name}`, () => {
+		assertIdempotent(code, expectsChange);
+	});
+}
 
 test("96h: fix→analyze converges", () => {
 	runFixAnalyzeLoopInMemory(
@@ -116,7 +105,7 @@ test("77q: ff-elysia convergence when available", async () => {
 			expect(count).toBeLessThanOrEqual(prevViolations);
 			prevViolations = count;
 			if (count === 0) break;
-			await fixFiles(patterns, fixConfig);
+			await fixFiles({ patterns: patterns, config: fixConfig });
 		}
 		expect(prevViolations).toBe(0);
 	} finally {
@@ -150,10 +139,10 @@ test("integration: fixFiles disk write is idempotent", async () => {
 		`function helper() { return "helper"; }
 function main() { return helper(); }`,
 		async (file) => {
-			const [r1] = await fixFiles([file], fixConfig);
+			const [r1] = await fixFiles({ patterns: [file], config: fixConfig });
 			expect(r1?.fixed).toBe(true);
 			const c1 = await Bun.file(file).text();
-			const [r2] = await fixFiles([file], fixConfig);
+			const [r2] = await fixFiles({ patterns: [file], config: fixConfig });
 			expect(r2?.fixed).toBe(false);
 			expect(await Bun.file(file).text()).toBe(c1);
 		},

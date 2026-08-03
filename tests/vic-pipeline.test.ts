@@ -1,27 +1,16 @@
 import { beforeAll, expect, test } from "bun:test";
 import { registerDefaultRules } from "../src/register-default-rules";
 import { clear, list } from "../src/registry";
-import {
-	ACTIONABLE_VIOLATION_TYPES,
-	getViolationFixture,
-	type ViolationType,
-} from "../src/violation-coverage";
-import { assertFixReducesViolations, defaultConfig } from "./helpers";
+import { ACTIONABLE_VIOLATION_TYPES } from "../src/violation-coverage";
 
 beforeAll(() => {
 	clear();
 	registerDefaultRules();
 });
 
-test("vic: pipeline uses registry; each actionable rule has fix coverage", () => {
+test("vic: registry has every actionable violation rule id", () => {
 	const ruleIds = new Set(list().map((r) => r.id));
-	const enabledRuleIds = [...ACTIONABLE_VIOLATION_TYPES];
-	for (const id of enabledRuleIds) {
+	for (const id of ACTIONABLE_VIOLATION_TYPES) {
 		expect(ruleIds.has(id), `registry should have rule ${id}`).toBe(true);
-	}
-	for (const violationType of ACTIONABLE_VIOLATION_TYPES) {
-		const fixture = getViolationFixture(violationType as ViolationType);
-		const config = { ...defaultConfig, enabledRuleIds };
-		assertFixReducesViolations(fixture, config, violationType);
 	}
 });

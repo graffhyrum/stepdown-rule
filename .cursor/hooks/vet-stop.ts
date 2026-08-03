@@ -17,7 +17,7 @@ const MAX_OUTPUT_CHARS = 12_000;
 const MAX_STDIN_CHARS = 8_192;
 const VET_TIMEOUT_MS = 280_000;
 const STOP_STATUSES = new Set<string>(["completed", "aborted", "error"]);
-const SECRET_ENV_KEY = /(?:SECRET|TOKEN|PASSWORD|API[_-]?KEY|CREDENTIAL|PRIVATE[_-]?KEY|AUTH)/i;
+const SECRET_ENV_KEY = /SECRET|TOKEN|PASSWORD|API[_-]?KEY|CREDENTIAL|PRIVATE[_-]?KEY|AUTH/i;
 const MIN_SECRET_VALUE_LEN = 8;
 const ROOT_CODE_FILES = new Set([
 	"package.json",

@@ -30,7 +30,7 @@ export async function analyzeFiles(
 	const service = fileService ?? new FileService({ ignore: config.ignore });
 	const { analysisResults } = await Pipeline.run({
 		patterns,
-		config: { ...config, fix: false },
+		config,
 		fileService: service,
 		registry,
 		mode: "analyze",

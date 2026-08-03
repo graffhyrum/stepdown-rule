@@ -1,77 +1,80 @@
-import { expect, test } from "bun:test";
-import { buildRuleContext } from "../src/analyzer";
+import { beforeAll, expect, test } from "bun:test";
 import { nestedRule } from "../src/nested-rule";
-import { FileService } from "../src/services/FileService";
+import { registerDefaultRules } from "../src/register-default-rules";
+import { clear } from "../src/registry";
 import { stepdownRule } from "../src/stepdown-rule";
 import { getViolationFixture } from "../src/violation-coverage";
+import { fixCode, parseRuleContext, totalViolations } from "./helpers";
 
-test("87w: StepdownRule.analyze matches current behavior", () => {
-	const fixture = getViolationFixture("stepdown");
-	const service = new FileService();
-	const parsedFile = service.parseContent(fixture, "test.ts");
-	const ctx = buildRuleContext(parsedFile);
-	const violations = stepdownRule.analyze(ctx);
-	expect(violations.length).toBeGreaterThan(0);
+beforeAll(() => {
+	clear();
+	registerDefaultRules();
 });
 
-test("87w: StepdownRule.fix reduces violations", () => {
+test("StepdownRule.analyze reports caller-before-callee pairs", () => {
+	const { ctx } = parseRuleContext(getViolationFixture("stepdown"));
+	const violations = stepdownRule.analyze(ctx);
+	expect(violations.length).toBeGreaterThan(0);
+	expect(violations.every((v) => v.kind === "stepdown")).toBe(true);
+	const pairs = violations
+		.filter((v) => v.kind === "stepdown")
+		.map((v) => `${v.function.name}->${v.dependency.name}`);
+	expect(pairs.length).toBeGreaterThan(0);
+});
+
+test("StepdownRule.fix reduces stepdown violations", () => {
 	const fixture = getViolationFixture("stepdown");
-	const service = new FileService();
-	const parsedFile = service.parseContent(fixture, "test.ts");
-	const ctx = buildRuleContext(parsedFile);
+	const { ctx } = parseRuleContext(fixture);
 	const violations = stepdownRule.analyze(ctx);
 	expect(violations.length).toBeGreaterThan(0);
 	const fixed = stepdownRule.fix(ctx, violations);
-	const parsedAfter = service.parseContent(fixed, "test.ts");
-	const ctxAfter = buildRuleContext(parsedAfter);
-	const afterViolations = stepdownRule.analyze(ctxAfter);
-	expect(afterViolations.length).toBeLessThan(violations.length);
+	const after = stepdownRule.analyze(parseRuleContext(fixed).ctx);
+	expect(after.length).toBeLessThan(violations.length);
 });
 
 test("stepdownRule.fix with empty violations returns unchanged content", () => {
 	const fixture = getViolationFixture("stepdown");
-	const service = new FileService();
-	const parsedFile = service.parseContent(fixture, "test.ts");
-	const ctx = buildRuleContext(parsedFile);
+	const { ctx } = parseRuleContext(fixture);
 	expect(stepdownRule.analyze(ctx).length).toBeGreaterThan(0);
 	expect(stepdownRule.fix(ctx, [])).toBe(ctx.parsedFile.content);
 });
 
-test("vld: NestedRule.analyze matches current behavior", () => {
-	const fixture = getViolationFixture("nested");
-	const service = new FileService();
-	const parsedFile = service.parseContent(fixture, "test.ts");
-	const ctx = buildRuleContext(parsedFile);
+test("NestedRule.analyze reports nested name and parent", () => {
+	const { ctx } = parseRuleContext(getViolationFixture("nested"));
 	const violations = nestedRule.analyze(ctx);
 	expect(violations.length).toBeGreaterThan(0);
+	const v = violations[0];
+	expect(v?.kind).toBe("nested");
+	if (v?.kind === "nested") {
+		expect(v.nested.name.length).toBeGreaterThan(0);
+		expect(v.parent.name.length).toBeGreaterThan(0);
+		expect(v.message).toContain("should appear after all logic");
+	}
 });
 
-test("5x2.1.2: nestedRule.fix(ctx, []) is no-op", () => {
+test("nestedRule.fix with empty violations is no-op", () => {
 	const fixture = getViolationFixture("nested");
-	const service = new FileService();
-	const parsedFile = service.parseContent(fixture, "test.ts");
-	const ctx = buildRuleContext(parsedFile);
+	const { ctx } = parseRuleContext(fixture);
 	expect(nestedRule.analyze(ctx).length).toBeGreaterThan(0);
 	expect(nestedRule.fix(ctx, [])).toBe(fixture);
 });
 
-
-test("vld: NestedRule.fix runs; stepdown then nested chain reduces violations", () => {
+test("nestedRule.fix alone reduces nested violations", () => {
 	const fixture = getViolationFixture("nested");
-	const service = new FileService();
-	let content = fixture;
-	let parsedFile = service.parseContent(content, "test.ts");
-	let ctx = buildRuleContext(parsedFile);
-	const stepdownV = stepdownRule.analyze(ctx);
-	const nestedV = nestedRule.analyze(ctx);
-	expect(stepdownV.length + nestedV.length).toBeGreaterThan(0);
-	content = stepdownRule.fix(ctx, stepdownV);
-	parsedFile = service.parseContent(content, "test.ts");
-	ctx = buildRuleContext(parsedFile);
-	content = nestedRule.fix(ctx, nestedRule.analyze(ctx));
-	parsedFile = service.parseContent(content, "test.ts");
-	ctx = buildRuleContext(parsedFile);
-	const afterStepdown = stepdownRule.analyze(ctx).length;
-	const afterNested = nestedRule.analyze(ctx).length;
-	expect(afterStepdown + afterNested).toBeLessThan(stepdownV.length + nestedV.length);
+	const { ctx } = parseRuleContext(fixture);
+	const before = nestedRule.analyze(ctx);
+	expect(before.length).toBeGreaterThan(0);
+	const fixed = nestedRule.fix(ctx, before);
+	const after = nestedRule.analyze(parseRuleContext(fixed).ctx);
+	expect(after.length).toBeLessThan(before.length);
+});
+
+test("both default rules fix nested fixture to fewer total violations", () => {
+	const fixture = getViolationFixture("nested");
+	const { ctx } = parseRuleContext(fixture);
+	const baseline = stepdownRule.analyze(ctx).length + nestedRule.analyze(ctx).length;
+	expect(baseline).toBeGreaterThan(0);
+	const { after, result } = fixCode(fixture);
+	expect(result.errors).toHaveLength(0);
+	expect(totalViolations(after)).toBeLessThan(baseline);
 });

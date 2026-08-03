@@ -45,17 +45,17 @@ test("detects circular dependencies", async () => {
 
 // --- Edge cases: variable declarations ---
 
-test("skips destructured variable declarations without simple identifier", () => {
+test("does not count destructured function bindings as top-level functions", () => {
 	const result = analyzeCode(`const { prop } = { prop: () => "test" };`);
 	expect(result.totalFunctions).toBe(0);
 });
 
-test("skips declarations without initializer", () => {
+test("uninitialized function-typed binding is not counted as a function", () => {
 	const result = analyzeCode(`let myFunc: () => void;\nmyFunc = () => console.log("test");`);
 	expect(result.totalFunctions).toBe(0);
 });
 
-test("skips array destructuring", () => {
+test("array-destructured arrows are not counted as top-level functions", () => {
 	const result = analyzeCode(`const [first, second] = [() => "a", () => "b"];`);
 	expect(result.totalFunctions).toBe(0);
 });
@@ -90,13 +90,19 @@ function main() { return arrowA(); }`,
 	expect(result.violations.length).toBeGreaterThan(0);
 });
 
-test("handles function expressions", () => {
+test("detects stepdown when function expression is called before definition", () => {
 	const result = analyzeCode(
 		`const funcExpr = function() { return helper(); };
 function helper() { return "helper"; }
 function main() { return funcExpr(); }`,
 	);
-	expect(result.totalFunctions).toBeGreaterThan(0);
+	expect(result.totalFunctions).toBe(3);
+	const pairs = result.violations.map((v) => ({
+		caller: v.function.name,
+		dependency: v.dependency.name,
+	}));
+	expect(pairs.length).toBeGreaterThan(0);
+	expect(pairs).toContainEqual({ caller: "main", dependency: "funcExpr" });
 });
 
 test("handles shared dependency (multiple callers)", () => {

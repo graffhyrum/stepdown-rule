@@ -70,11 +70,16 @@ test("registry: registerDefaultRules populates fresh registry without mutating i
 	expect(isolated.list()).toEqual([]);
 });
 
-test("registry: clear empties default; registerDefaultRules is idempotent", () => {
+test("registry: registerDefaultRules is idempotent on default registry", () => {
 	expect(defaultList()).toEqual([]);
 	registerDefaultRules();
 	registerDefaultRules();
 	expect(defaultList().map((r) => r.id).sort()).toEqual(["nested", "stepdown"]);
+});
+
+test("registry: clear empties default registry", () => {
+	registerDefaultRules();
+	expect(defaultList().length).toBeGreaterThan(0);
 	clear();
 	expect(defaultList()).toEqual([]);
 });

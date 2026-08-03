@@ -396,7 +396,7 @@ export { foo };`;
 	expect(lastNode && ts.isExportDeclaration(lastNode)).toBe(true);
 });
 
-test("visitAllNodes visits every node in tree", () => {
+test("visitAllNodes visits function declaration and identifiers", () => {
 	const code = "function foo(x) { return x + 1; }";
 	const sourceFile = parseCode(code);
 	const visited: ts.SyntaxKind[] = [];
@@ -405,9 +405,9 @@ test("visitAllNodes visits every node in tree", () => {
 		visited.push(node.kind);
 	});
 
-	// Should have visited many nodes
-	expect(visited.length).toBeGreaterThan(5);
 	expect(visited).toContain(ts.SyntaxKind.FunctionDeclaration);
+	expect(visited).toContain(ts.SyntaxKind.Identifier);
+	expect(visited).toContain(ts.SyntaxKind.ReturnStatement);
 });
 
 test("findNodes finds all nodes matching predicate", () => {
@@ -435,10 +435,9 @@ test("findFirstNode returns first matching node", () => {
 
 	const firstFunc = findFirstNode(sourceFile, ts.isFunctionDeclaration);
 
+	expect(firstFunc && ts.isFunctionDeclaration(firstFunc)).toBe(true);
 	if (firstFunc && ts.isFunctionDeclaration(firstFunc)) {
-		expect(true).toBe(true); // Type-narrowed successfully
-	} else {
-		throw new Error("Expected function declaration");
+		expect(firstFunc.name?.text).toBe("foo");
 	}
 });
 
