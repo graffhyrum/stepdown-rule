@@ -1,6 +1,6 @@
 {
 	"name": "@stepdown/analyzer",
-	"version": "0.3.0",
+	"version": "0.2.0",
 	"private": true,
 	"description": "TypeScript AST analyzer that enforces the stepdown rule for function organization",
 	"keywords": [
@@ -43,7 +43,9 @@
 		"fix": "bunx oxlint --fix . && bunx oxfmt --write .",
 		"custom-hooks": "bun run scripts/rule-validator.ts && bun run dist/cli.js fix",
 		"fastvet": "bun run build && bun typecheck && bun fix && bun run custom-hooks  && bun run test:coverage",
-		"vet": "bun fastvet"
+		"vet": "bun fastvet",
+		"changeset": "changeset",
+		"version": "changeset version"
 	},
 	"dependencies": {
 		"arktype": "^2.2.3",

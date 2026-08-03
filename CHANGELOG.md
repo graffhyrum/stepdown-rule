@@ -1,20 +1,5 @@
 # @stepdown/analyzer
 
-## 0.3.0
-
-### Minor Changes
-
-- 69a6958: GitHub Release multi-target minify compile + Pages install one-liners (install.sh / install.ps1).
-
-### Patch Changes
-
-- 602f33d: Document simplify-review remediations and unilateral bead-deferral process failure.
-- 63dfc13: Register default rules in rule-fix-coverage tests so coverage runs see stepdown/nested.
-- 4fc3f56: Commit SpecStory session history for agent effectiveness meta-analysis.
-- 13906d8: Sync beads issues (restore deferred tickets, add typecheck scripts bead) and ignore write.lock/\*.tmp.
-- 7f02283: Fix Windows FileService globs/ignores via posix path normalization and post-filter.
-- dfc8c95: Windows-safe tooling: LF gitattributes, portable remove-buildinfo/sync-agents, bin→cli.js, Cursor stop→vet hook.
-
 ## 0.2.0
 
 ### Minor Changes
