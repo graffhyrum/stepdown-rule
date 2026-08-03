@@ -1,0 +1,14 @@
+fixtures/stepdown-violation.ts:11:1 - Stepdown violation: createUser calls hashPassword which appears above it
+  call site: fixtures/stepdown-violation.ts:12:17
+  dependency declared at: fixtures/stepdown-violation.ts:3:1
+fixtures/stepdown-violation.ts:16:1 - Stepdown violation: _main calls createUser which appears above it
+  call site: fixtures/stepdown-violation.ts:18:15
+  dependency declared at: fixtures/stepdown-violation.ts:11:1
+fixtures/stepdown-violation.ts:16:1 - Stepdown violation: _main calls validateEmail which appears above it
+  call site: fixtures/stepdown-violation.ts:19:18
+  dependency declared at: fixtures/stepdown-violation.ts:7:1
+fixtures/stepdown-violation.ts:31:1 - Stepdown violation: _processData calls cleanData which appears above it
+  call site: fixtures/stepdown-violation.ts:32:18
+  dependency declared at: fixtures/stepdown-violation.ts:27:1
+
+Found 4 violations in 1 files

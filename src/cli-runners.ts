@@ -1,8 +1,9 @@
-import { analyzeFiles } from "./analyzer";
 import type { CliErrorPayload } from "./cli-errors";
 import { loadConfig } from "./config/loader";
-import { fixFiles, type FixFilesOptions } from "./fixer";
+import type { FixFilesOptions } from "./fixer";
+import { Pipeline } from "./pipeline";
 import { FileService } from "./services/FileService";
+import type { IFileService } from "./services/types";
 import type { AnalysisResult, Config, FixResult } from "./types";
 export interface CliOptions {
 	ignore?: string[];
@@ -32,7 +33,9 @@ export async function buildConfigFromCliSafe(options: CliOptions): Promise<
 		};
 	}
 }
-export async function buildConfigFromCli(options: CliOptions): Promise<Config> {
+export async function buildConfigFromCli(
+	options: CliOptions & { format?: string },
+): Promise<Config> {
 	const fileConfig = await loadConfig(options.config);
 	const enabledRuleIds = options.rules
 		? options.rules
@@ -40,15 +43,16 @@ export async function buildConfigFromCli(options: CliOptions): Promise<Config> {
 				.map((s) => s.trim())
 				.filter(Boolean)
 		: undefined;
+	const json = options.json === true || options.format === "json" || options.format === "agents";
 	return {
 		ignore: options.ignore ?? fileConfig.ignore,
 		fix: false,
-		json: options.json ?? false,
+		json,
 		enabledRuleIds,
 	};
 }
 export async function resolvePatterns(
-	fileService: FileService,
+	fileService: IFileService,
 	patterns: string[],
 ): Promise<
 	| {
@@ -73,18 +77,33 @@ export async function resolvePatterns(
 export async function runAnalyze(
 	patterns: string[],
 	config: Config,
-	fileService?: FileService,
+	fileService?: IFileService,
 	resolvedFiles?: string[],
 ): Promise<AnalysisResult[]> {
 	const service = fileService ?? new FileService({ ignore: config.ignore });
-	return analyzeFiles(patterns, config, service, resolvedFiles);
+	const { analysisResults } = await Pipeline.run({
+		patterns,
+		config,
+		fileService: service,
+		mode: "analyze",
+		resolvedFiles,
+	});
+	return analysisResults;
 }
 export async function runFix(
 	patterns: string[],
 	config: Config,
-	fileService?: FileService,
+	fileService?: IFileService,
 	fixOptions: FixFilesOptions = {},
 ): Promise<FixResult[]> {
 	const service = fileService ?? new FileService({ ignore: config.ignore });
-	return fixFiles(patterns, { ...config, fix: true }, service, fixOptions);
+	const { fixResults } = await Pipeline.run({
+		patterns,
+		config: { ...config, fix: true },
+		fileService: service,
+		mode: "fix",
+		resolvedFiles: fixOptions.resolvedFiles,
+		dryRun: fixOptions.dryRun,
+	});
+	return fixResults;
 }

@@ -3,7 +3,9 @@
 	"hooks": {
 		"stop": [
 			{
-				"command": "bun vet"
+				"command": "bun .cursor/hooks/vet-stop.ts",
+				"timeout": 300,
+				"loop_limit": 5
 			}
 		]
 	}

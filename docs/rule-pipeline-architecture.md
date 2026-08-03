@@ -2,6 +2,19 @@
 
 Efficient pipeline: **parse AST once per file**, run all enabled rules' analyses on the shared context, then run each enabled rule's fix in sequence (so fixes see the result of previous fixes).
 
+## Module / export name
+
+| Item | Value |
+|------|--------|
+| Module | `src/pipeline.ts` |
+| Export | `Pipeline` (object) |
+| Entry | `Pipeline.run(options)` |
+| Result type | `PipelineResult` (`analysisResults`, `fixResults`) |
+
+Chosen name: **`Pipeline`** (not `RunPipeline`). Docs historically used `RunPipeline` as a use-case label; the concrete export is `Pipeline.run`. Mode is `"analyze" | "fix"`. Deps: `fileService`, optional `registry`, `config`, patterns.
+
+As of stepdown-5x2.4.2, `Pipeline.run` owns the per-file Resolved→Parsed→Analyzed→Fixed loop. `analyzeFiles` / `fixFiles` / fixer `runPipeline` are thin facades over `Pipeline.run`.
+
 ---
 
 ## Approach
@@ -56,7 +69,7 @@ classDiagram
     class FixResult
   }
   namespace useCases {
-    class RunPipeline
+    class Pipeline
     class ParseAndBuildContext
     class ExecuteRules
   }
@@ -72,11 +85,11 @@ classDiagram
     class CLI
   }
 
-  RunPipeline --> ParseAndBuildContext
-  RunPipeline --> ExecuteRules
-  RunPipeline --> RuleRegistry
-  RunPipeline --> FileService
-  RunPipeline --> ConfigLoader
+  Pipeline --> ParseAndBuildContext
+  Pipeline --> ExecuteRules
+  Pipeline --> RuleRegistry
+  Pipeline --> FileService
+  Pipeline --> ConfigLoader
   ParseAndBuildContext --> RuleContext
   ParseAndBuildContext --> TypeScriptAPI
   ParseAndBuildContext --> FileService
@@ -88,7 +101,7 @@ classDiagram
   ViolationRule <|.. StepdownRule
   ViolationRule <|.. NestedRule
   RuleRegistry --> ViolationRule
-  CLI --> RunPipeline
+  CLI --> Pipeline
   FileService --> BunFS
   ParseAndBuildContext --> BunFS
 
@@ -102,7 +115,7 @@ classDiagram
 ```
 
 - **ViolationRule**: port/interface implemented by each rule (stepdown, nested, etc.); guarantees analyze + fix (or explicit report-only).
-- **RuleRegistry**: holds enabled rules and order; used by `RunPipeline` to decide which rules to run and in what order for the fix phase.
+- **RuleRegistry**: holds enabled rules and order; used by `Pipeline.run` to decide which rules to run and in what order for the fix phase.
 - **ParseAndBuildContext**: use case that reads the file (via `FileService`), parses with TypeScript, and builds the shared `RuleContext` once per file.
 - **ExecuteRules**: use case that runs each enabled rule’s `analyze` on the same context, then runs each enabled rule’s `fix` in sequence, passing updated content to the next fix.
 
@@ -113,37 +126,37 @@ classDiagram
 ```mermaid
 sequenceDiagram
   participant CLI
-  participant RunPipeline
+  participant Pipeline
   participant FileService
   participant ParseAndBuildContext
   participant RuleRegistry
   participant Rule as ViolationRule
 
-  CLI --> RunPipeline: run(patterns, config, enabledRuleIds)
-  RunPipeline --> FileService: resolveFiles(patterns)
-  FileService --> RunPipeline: paths[]
+  CLI --> Pipeline: Pipeline.run(patterns, config, mode)
+  Pipeline --> FileService: resolveFiles(patterns)
+  FileService --> Pipeline: paths[]
 
   loop For each file
-    RunPipeline --> FileService: readFile(path)
-    RunPipeline --> ParseAndBuildContext: parse(content, path)
-    ParseAndBuildContext --> RunPipeline: ctx
+    Pipeline --> FileService: readFile(path)
+    Pipeline --> ParseAndBuildContext: parse(content, path)
+    ParseAndBuildContext --> Pipeline: ctx
 
     loop For each enabled rule
-      RunPipeline --> Rule: analyze(ctx)
-      Rule --> RunPipeline: violations[]
+      Pipeline --> Rule: analyze(ctx)
+      Rule --> Pipeline: violations[]
     end
 
     alt --fix and any violations
       loop For each enabled rule with fix
-        RunPipeline --> Rule: fix(ctx, violations)
-        Rule --> RunPipeline: newContent
-        RunPipeline --> RunPipeline: content = newContent
+        Pipeline --> Rule: fix(ctx, violations)
+        Rule --> Pipeline: newContent
+        Pipeline --> Pipeline: content = newContent
       end
-      RunPipeline --> FileService: writeFile(path, content)
+      Pipeline --> FileService: writeFile(path, content)
     end
   end
 
-  RunPipeline --> CLI: results
+  Pipeline --> CLI: results
 ```
 
 This matches the “parse once → all analyses → fixes of each enabled analyses” flow and keeps a single AST and shared context per file.

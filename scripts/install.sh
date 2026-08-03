@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
-# Install stepdown-rule from GitHub Releases.
-# Usage:
-#   curl -fsSL https://graffhyrum.github.io/stepdown-rule/install | bash
-#   VERSION=v0.2.0 bash install
+# Install stepdown-rule from GitHub Releases (verifies SHA256SUMS before install).
+#
+# Preferred (download → inspect → run):
+#   curl -fsSL -o install.sh https://github.com/graffhyrum/stepdown-rule/releases/latest/download/install.sh
+#   bash install.sh
+#
+# Pin: VERSION=v0.2.0 bash install.sh
+#
+# Pipe-to-shell trusts the fetch host at runtime — prefer the path above.
 set -euo pipefail
 
 REPO="graffhyrum/stepdown-rule"
@@ -69,6 +74,7 @@ if [[ "$actual" != "$expected" ]]; then
   echo "  actual:   ${actual}" >&2
   exit 1
 fi
+echo "Checksum OK (${asset})"
 
 install_dir="${INSTALL_DIR:-}"
 if [[ -z "$install_dir" ]]; then

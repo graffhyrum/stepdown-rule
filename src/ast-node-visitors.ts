@@ -51,7 +51,7 @@ export function categorizeNodes(sourceFile: ts.SourceFile): CategorizedNodes {
 		} else if (isExport(node)) {
 			result.exports.push(node);
 		} else if (isFunctionDeclaration(node)) {
-			result.functions.push({ node, info: null });
+			result.functions.push({ node });
 		} else if (ts.isVariableStatement(node)) {
 			handleVariableStatement(node, result);
 		} else {
@@ -86,7 +86,7 @@ function handleVariableStatement(node: ts.VariableStatement, result: Categorized
 	const declarationList = node.declarationList;
 	for (const declaration of declarationList.declarations) {
 		if (declaration.initializer && isFunctionLike(declaration.initializer)) {
-			result.functions.push({ node, info: null });
+			result.functions.push({ node });
 			return;
 		}
 	}
@@ -97,10 +97,7 @@ function handleVariableStatement(node: ts.VariableStatement, result: Categorized
  */
 export function reconstructStatements(
 	categorized: CategorizedNodes,
-	reorderedFunctions: Array<{
-		node: ts.Node;
-		info: null;
-	}>,
+	reorderedFunctions: FunctionNode[],
 ): ts.Statement[] {
 	return [
 		...(categorized.imports as ts.Statement[]),
@@ -113,12 +110,13 @@ export function reconstructStatements(
  * Reusable AST node visitors and categorization logic.
  * Consolidates visitor patterns from analyzer.ts and fixer.ts.
  */
+export interface FunctionNode {
+	node: ts.Node;
+}
+
 export interface CategorizedNodes {
 	imports: ts.Node[];
-	functions: Array<{
-		node: ts.Node;
-		info: null;
-	}>;
+	functions: FunctionNode[];
 	exports: ts.Node[];
 	other: ts.Node[];
 }

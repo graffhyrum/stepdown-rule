@@ -1,7 +1,13 @@
 # Install stepdown-rule from GitHub Releases (Windows x64).
-# Usage:
-#   irm https://graffhyrum.github.io/stepdown-rule/install.ps1 | iex
-#   $env:VERSION = 'v0.2.0'; .\install.ps1
+# Verifies SHA256SUMS before install.
+#
+# Preferred (download → inspect → run):
+#   Invoke-WebRequest -Uri https://github.com/graffhyrum/stepdown-rule/releases/latest/download/install.ps1 -OutFile install.ps1
+#   powershell -File .\install.ps1
+#
+# Pin: $env:VERSION = 'v0.2.0'; powershell -File .\install.ps1
+#
+# Pipe-to-shell (irm|iex) trusts the fetch host at runtime — prefer the path above.
 $ErrorActionPreference = 'Stop'
 
 $Repo = 'graffhyrum/stepdown-rule'
@@ -50,6 +56,7 @@ try {
 	if ($Actual -ne $Expected) {
 		throw "Checksum mismatch for $Asset`n  expected: $Expected`n  actual:   $Actual"
 	}
+	Write-Host "Checksum OK ($Asset)"
 
 	$Dest = Join-Path $InstallRoot 'stepdown-rule.exe'
 	Copy-Item -Force $BinPath $Dest

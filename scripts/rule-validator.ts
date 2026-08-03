@@ -1,23 +1,14 @@
 // Rule Compliance Validator
 // Scans code for violations of AGENTS.md rules
-
 import path from "node:path";
 import { Glob } from "bun";
-
 const EXCLUDE_PATTERNS = ["node_modules/", "dist/", "build/", ".git/", "playwright-report/"];
-
-function shouldExclude(filePath: string): boolean {
-	const normalized = filePath.replace(/\\/g, "/");
-	return EXCLUDE_PATTERNS.some((p) => normalized.includes(p));
-}
-
 interface Rule {
 	name: string;
 	pattern: RegExp;
 	message: string;
 	severity: "error" | "warning";
 }
-
 interface Violation {
 	file: string;
 	line: number;
@@ -25,7 +16,6 @@ interface Violation {
 	rule: Rule;
 	match: string;
 }
-
 const RULES: Rule[] = [
 	{
 		name: "no-waitForTimeout",
@@ -53,14 +43,69 @@ const RULES: Rule[] = [
 		severity: "error",
 	},
 ];
-
 interface CheckLineParams {
 	line: string;
 	lineIndex: number;
 	filePath: string;
 	violations: Violation[];
 }
-
+const args = process.argv.slice(2);
+const pattern = args[0] || "**/*.{ts,tsx,js,jsx}";
+console.log("🔍 Scanning for rule violations...\n");
+try {
+	const { totalViolations, errorCount, warningCount } = await scanFiles(pattern);
+	printSummaryReport(totalViolations, errorCount, warningCount);
+	exitWithResult(errorCount, warningCount);
+} catch (error) {
+	console.error("❌ Error scanning files:", error);
+	process.exit(1);
+}
+async function scanFiles(pattern: string): Promise<{
+	totalViolations: number;
+	errorCount: number;
+	warningCount: number;
+}> {
+	const glob = new Glob(pattern);
+	let totalViolations = 0;
+	let errorCount = 0;
+	let warningCount = 0;
+	for await (const file of glob.scan(".")) {
+		if (shouldExclude(file)) continue;
+		if (!shouldProcessFile(file)) {
+			continue;
+		}
+		const violations = await scanFile(file);
+		if (violations.length > 0) {
+			printViolations(file, violations);
+			totalViolations += violations.length;
+			errorCount += countBySeverity(violations, "error");
+			warningCount += countBySeverity(violations, "warning");
+		}
+	}
+	return { totalViolations, errorCount, warningCount };
+}
+async function scanFile(filePath: string): Promise<Violation[]> {
+	const violations: Violation[] = [];
+	const content = await Bun.file(filePath).text();
+	const lines = content.split("\n");
+	for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+		const thisLine = lines[lineIndex];
+		if (thisLine === undefined) {
+			continue;
+		}
+		checkLineForViolations({
+			line: thisLine,
+			lineIndex,
+			filePath,
+			violations,
+		});
+	}
+	return violations;
+}
+function shouldExclude(filePath: string): boolean {
+	const normalized = filePath.replace(/\\/g, "/");
+	return EXCLUDE_PATTERNS.some((p) => normalized.includes(p));
+}
 function checkLineForViolations(params: CheckLineParams): void {
 	const { line, lineIndex, filePath, violations } = params;
 	for (const rule of RULES) {
@@ -76,39 +121,15 @@ function checkLineForViolations(params: CheckLineParams): void {
 		}
 	}
 }
-
-async function scanFile(filePath: string): Promise<Violation[]> {
-	const violations: Violation[] = [];
-	const content = await Bun.file(filePath).text();
-	const lines = content.split("\n");
-
-	for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-		const thisLine = lines[lineIndex];
-		if (thisLine === undefined) {
-			continue;
-		}
-		checkLineForViolations({
-			line: thisLine,
-			lineIndex,
-			filePath,
-			violations,
-		});
-	}
-
-	return violations;
-}
-
 function shouldProcessFile(file: string): boolean {
 	const isValidExtension =
 		file.endsWith(".ts") || file.endsWith(".tsx") || file.endsWith(".js") || file.endsWith(".jsx");
 	const isNotSelf = !file.includes("rule-validator");
 	return isValidExtension && isNotSelf;
 }
-
 function countBySeverity(violations: Violation[], severity: "error" | "warning"): number {
 	return violations.filter((v) => v.rule.severity === severity).length;
 }
-
 function printViolations(file: string, violations: Violation[]): void {
 	const relativePath = path.relative(process.cwd(), file);
 	console.log(`📁 ${relativePath}:`);
@@ -119,7 +140,6 @@ function printViolations(file: string, violations: Violation[]): void {
 	}
 	console.log("");
 }
-
 function printSummaryReport(
 	totalViolations: number,
 	errorCount: number,
@@ -129,7 +149,6 @@ function printSummaryReport(
 		`📊 Summary: ${totalViolations} violations (${errorCount} errors, ${warningCount} warnings)`,
 	);
 }
-
 function exitWithResult(errorCount: number, warningCount: number): never {
 	if (errorCount > 0) {
 		console.log("\n🚫 Errors found! Fix before proceeding.");
@@ -140,45 +159,4 @@ function exitWithResult(errorCount: number, warningCount: number): never {
 	} else {
 		process.exit(0);
 	}
-}
-
-async function scanFiles(
-	pattern: string,
-): Promise<{ totalViolations: number; errorCount: number; warningCount: number }> {
-	const glob = new Glob(pattern);
-
-	let totalViolations = 0;
-	let errorCount = 0;
-	let warningCount = 0;
-
-	for await (const file of glob.scan(".")) {
-		if (shouldExclude(file)) continue;
-		if (!shouldProcessFile(file)) {
-			continue;
-		}
-
-		const violations = await scanFile(file);
-		if (violations.length > 0) {
-			printViolations(file, violations);
-			totalViolations += violations.length;
-			errorCount += countBySeverity(violations, "error");
-			warningCount += countBySeverity(violations, "warning");
-		}
-	}
-
-	return { totalViolations, errorCount, warningCount };
-}
-
-const args = process.argv.slice(2);
-const pattern = args[0] || "**/*.{ts,tsx,js,jsx}";
-
-console.log("🔍 Scanning for rule violations...\n");
-
-try {
-	const { totalViolations, errorCount, warningCount } = await scanFiles(pattern);
-	printSummaryReport(totalViolations, errorCount, warningCount);
-	exitWithResult(errorCount, warningCount);
-} catch (error) {
-	console.error("❌ Error scanning files:", error);
-	process.exit(1);
 }

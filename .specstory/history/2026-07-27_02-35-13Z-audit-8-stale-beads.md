@@ -36,6 +36,18 @@ Return a compact markdown table + short summary of which IDs are safe to close.
 
 _**Agent (default)**_
 
+<think><details><summary>Thought Process</summary>
+Auditing eight open beads to determine whether they are fully implemented, partially done, or still valid open work.
+
+Checking whether stepdown-pno, stepdown-ciq, and stepdown-1np still exist. Searching the codebase and beads for evidence.
+</details></think>
+
+_**Agent (default)**_
+
+I'll audit each bead against the current codebase and check whether those three IDs still exist in beads.
+
+_**Agent (default)**_
+
 <tool-use data-tool-type="unknown" data-tool-name="update_current_step"><details>
 <summary>Tool use: **update_current_step**</summary>
 An unknown error occurred
@@ -48,12 +60,1086 @@ _**Agent (default)**_
 ```bash
 br show stepdown-00h stepdown-8pt stepdown-v3a stepdown-kz4 stepdown-bld stepdown-bru stepdown-74p stepdown-rls stepdown-pno stepdown-ciq stepdown-1np 2>&1; echo "---"; rg -n "stepdown-(00h|8pt|v3a|kz4|bld|bru|74p|rls|pno|ciq|1np)" .beads/issues.jsonl 2>&1 | head -50
 ```
+
+```
+Error: Issue not found: stepdown-pno
+Hint: Run 'br list' to see available issues.
+---
+head: C:\Users\graff\AppData\Local\Temp\ps-script-e7b5d6d4-ea9d-4487-ae06-f2a343e8c13f.ps1:7
+Line |
+   7 |  . kz4|bld|bru|74p|rls|pno|ciq|1np)" .beads/issues.jsonl 2>&1 | head -50
+     |                                                                 ~~~~
+     | The term 'head' is not recognized as a name of a cmdlet, function, script file, or executable program. Check the
+     | spelling of the name, or if a path was included, verify that the path is correct and try again.
+
+```
 </details></tool-use>
 
 _**Agent (default)**_
 
 <tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
 <summary>Tool use: **ripgrep_raw_search**</summary>
-Status: **loading**
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "dry-run|dryRun|--dry-run"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "dry-run|dryRun|--dry-run",
+  "topFiles": [
+    {
+      "matchCount": 13,
+      "uri": "src\\fixer.ts"
+    },
+    {
+      "matchCount": 5,
+      "uri": "src\\cli-agents.ts"
+    },
+    {
+      "matchCount": 2,
+      "uri": "src\\cli-output.ts"
+    }
+  ],
+  "totalFiles": 3,
+  "totalMatches": 20
+}
+```
+Status: **completed**
 
 </details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "isStepdownViolation|findAndRemoveLeafFunctions|buildPositionMap|kind.*stepdown|dependency in"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "isStepdownViolation|findAndRemoveLeafFunctions|buildPositionMap|kind.*stepdown|dependency in",
+  "topFiles": [
+    {
+      "matchCount": 1,
+      "uri": "src/graph-algorithms.ts"
+    },
+    {
+      "matchCount": 2,
+      "uri": "src/analyzer.ts"
+    },
+    {
+      "matchCount": 5,
+      "uri": "src/fixer.ts"
+    }
+  ],
+  "totalFiles": 3,
+  "totalMatches": 8
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "reorderFunctionDeclarations|fixFileWithRules"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "reorderFunctionDeclarations|fixFileWithRules",
+  "topFiles": [
+    {
+      "matchCount": 4,
+      "uri": "src\\fixer.ts"
+    }
+  ],
+  "totalFiles": 1,
+  "totalMatches": 4
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "FunctionNode|info:\\s*null|info\\?:"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "FunctionNode|info:\\s*null|info\\?:",
+  "topFiles": [
+    {
+      "matchCount": 4,
+      "uri": "src/ast-node-visitors.ts"
+    },
+    {
+      "matchCount": 5,
+      "uri": "src/fixer.ts"
+    },
+    {
+      "matchCount": 7,
+      "uri": "src/analyzer.ts"
+    },
+    {
+      "matchCount": 1,
+      "uri": "src/ast-graph-builder.ts"
+    }
+  ],
+  "totalFiles": 4,
+  "totalMatches": 17
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "dependencyGraph"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "dependencyGraph",
+  "topFiles": [
+    {
+      "matchCount": 4,
+      "uri": "src/cli-json.ts"
+    },
+    {
+      "matchCount": 1,
+      "uri": "src/rule-context.ts"
+    },
+    {
+      "matchCount": 3,
+      "uri": "src/fixer.ts"
+    },
+    {
+      "matchCount": 1,
+      "uri": "src/stepdown-rule.ts"
+    },
+    {
+      "matchCount": 5,
+      "uri": "src/analyzer.ts"
+    },
+    {
+      "matchCount": 1,
+      "uri": "src/types.ts"
+    },
+    {
+      "matchCount": 1,
+      "uri": "src/cli-agents.ts"
+    }
+  ],
+  "totalFiles": 7,
+  "totalMatches": 16
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "file:\\s*[\\\"']|[\\\"']file[\\\"']|file:\\s*string|file\\?:\\s*string"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "file:\\s*[\\\"']|[\\\"']file[\\\"']|file:\\s*string|file\\?:\\s*string",
+  "topFiles": [
+    {
+      "matchCount": 4,
+      "uri": "src/types.ts"
+    },
+    {
+      "matchCount": 2,
+      "uri": "src/analyzer.ts"
+    },
+    {
+      "matchCount": 1,
+      "uri": "src/cli-output.ts"
+    },
+    {
+      "matchCount": 2,
+      "uri": "src/fixer.ts"
+    },
+    {
+      "matchCount": 1,
+      "uri": "src/config/schema.ts"
+    },
+    {
+      "matchCount": 3,
+      "uri": "src/cli.ts"
+    }
+  ],
+  "totalFiles": 6,
+  "totalMatches": 13
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "createRegistry|resetRegistry|registry.*factory|getRegistry|registerRule"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "createRegistry|resetRegistry|registry.*factory|getRegistry|registerRule",
+  "topFiles": [],
+  "totalFiles": 0,
+  "totalMatches": 0
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="search" data-tool-name="glob_file_search"><details>
+<summary>Tool use: **glob_file_search** • Searched codebase "" • **0** results in **1** directory</summary>
+
+Directory: **``** (0 files)
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "detectNested|nested.*violation|findNested"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "detectNested|nested.*violation|findNested",
+  "topFiles": [
+    {
+      "matchCount": 4,
+      "uri": "src/cli.ts"
+    },
+    {
+      "matchCount": 7,
+      "uri": "src/analyzer.ts"
+    },
+    {
+      "matchCount": 2,
+      "uri": "src/nested-rule.ts"
+    }
+  ],
+  "totalFiles": 3,
+  "totalMatches": 13
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<think><details><summary>Thought Process</summary>
+The audit is progressing well. I will now inspect each bead individually, since the bulk `br show` command failed on the first missing ID.
+</details></think>
+
+_**Agent (default)**_
+
+Digging into each bead's implementation details and verifying bead existence.
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="update_current_step"><details>
+<summary>Tool use: **update_current_step**</summary>
+An unknown error occurred
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2"><details>
+<summary>Tool use: **run_terminal_command_v2** • Run command: br show stepdown-00h; br show stepdown-8pt; br show stepdown-v3a; br show stepdown-kz4; br show stepdown-bld; br show stepdown-bru; br show stepdown-74p; br show stepdown-rls; br show stepdown-ciq; br show stepdown-1np 2&gt;&amp;1</summary>
+```bash
+br show stepdown-00h; br show stepdown-8pt; br show stepdown-v3a; br show stepdown-kz4; br show stepdown-bld; br show stepdown-bru; br show stepdown-74p; br show stepdown-rls; br show stepdown-ciq; br show stepdown-1np 2>&1
+```
+
+```
+○ stepdown-00h · UX: Fix command has no --dry-run mode   [● P3 · OPEN]
+Owner: pendragon.josh@gmail.com · Type: feature
+Created: 2026-03-03 · Updated: 2026-03-03
+
+The fix command writes files immediately with no preview. Users cannot see what would change before committing. Should add --dry-run flag that shows diffs without writing.
+○ stepdown-8pt · Harden type guards, mutation, and position map   [● P3 · OPEN]
+Owner: pendragon.josh@gmail.com · Type: chore
+Created: 2026-03-03 · Updated: 2026-03-03
+
+Three hardening items: (1) analyzer.ts:580 isStepdownViolation uses fragile 'dependency in v' check — use discriminated union with type field instead. (2) graph-algorithms.ts findAndRemoveLeafFunctions mutates its input Map — clone before mutating or document the contract. (3) fixer.ts:480-491 buildPositionMap uses trimmed line as key — identical function signatures collide, giving wrong countFunctionMovements results. Use line+index composite key.
+
+Notes:
+Expert review (3/3 consensus): (1) Add discriminant `kind: 'stepdown' | 'nested'` field to StepdownViolation and NestedFunctionViolation. Replace structural sniffing (`'dependency' in v`) with `v.kind === 'stepdown'`. Both inline and named type guards are inconsistent — one uses named guard, other uses anonymous `'nested' in v`. (2) findAndRemoveLeafFunctions should return `[leafNames, remainingDeps]` tuple instead of mutating input map. Current safety depends on defensive copy in caller (fixer.ts:229).
+○ stepdown-v3a · Align legacy and rule-based fix pipelines   [● P2 · OPEN]
+Owner: pendragon.josh@gmail.com · Type: task
+Created: 2026-03-03 · Updated: 2026-03-03
+
+fixer.ts has two divergent fix paths: (1) Legacy: reorderFunctionDeclarations() does top-level + nested in one pass. (2) Rule-based: fixFileWithRules() calls each rule's fix() sequentially, using reorderTopLevelOnly() or applyNestedOnly() separately. These paths can produce different results for the same input. Align them so both produce identical output.
+
+Notes
+… (output truncated)
+```
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\analyzer.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\graph-algorithms.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\fixer.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\fixer.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\types.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\registry.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "glob": "**/*.{jsonl,json,md}",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule",
+  "pattern": "stepdown-(pno|ciq|1np|00h|8pt|v3a|kz4|bld|bru|74p|rls)"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule",
+  "pattern": "stepdown-(pno|ciq|1np|00h|8pt|v3a|kz4|bld|bru|74p|rls)",
+  "topFiles": [
+    {
+      "matchCount": 6,
+      "uri": "docs/post-mortems/2026-03-03-expert-review-to-beads.md"
+    },
+    {
+      "matchCount": 8,
+      "uri": ".beads/issues.jsonl"
+    },
+    {
+      "matchCount": 8,
+      "uri": ".beads\\issues.jsonl"
+    },
+    {
+      "matchCount": 54,
+      "uri": ".specstory\\history\\2026-07-27_02-24-52Z-bead-cycle-discussion.md"
+    },
+    {
+      "matchCount": 11,
+      "uri": ".specstory\\history\\2026-07-27_02-35-13Z-audit-8-stale-beads.md"
+    },
+    {
+      "matchCount": 8,
+      "uri": ".beads\\.br_history\\issues.20260727_023125_842142100.jsonl"
+    }
+  ],
+  "totalFiles": 6,
+  "totalMatches": 95
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\tests",
+  "pattern": "dryRun|dry-run|useRulePipeline|createRegistry|FunctionNode|dependencyGraph\\?"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\tests",
+  "pattern": "dryRun|dry-run|useRulePipeline|createRegistry|FunctionNode|dependencyGraph\\?",
+  "topFiles": [
+    {
+      "matchCount": 3,
+      "uri": "tests/cli.test.ts"
+    },
+    {
+      "matchCount": 1,
+      "uri": "tests/analyzer-fixer-unified.test.ts"
+    }
+  ],
+  "totalFiles": 2,
+  "totalMatches": 4
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src\\cli.ts",
+  "pattern": "--dry-run|dryRun"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src\\cli.ts",
+  "pattern": "--dry-run|dryRun",
+  "topFiles": [],
+  "totalFiles": 0,
+  "totalMatches": 0
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<think><details><summary>Thought Process</summary>
+Checking the fix command's --dry-run implementation. Verifying the clone comment for findAndRemoveLeafFunctions. Confirming whether stepdown-37b is resolved, since it blocks stepdown-rls.
+
+Searching more carefully for stepdown-pno, stepdown-ciq, and stepdown-1np.
+</details></think>
+
+_**Agent (default)**_
+
+Checking whether `--dry-run` landed on the main `fix` command (not only agents), and verifying a few edge cases.
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "glob": "*.ts",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src\\cli.ts",
+  "pattern": "dry-run|dryRun|fix"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src\\cli.ts",
+  "pattern": "dry-run|dryRun|fix",
+  "topFiles": [
+    {
+      "matchCount": 14,
+      "uri": "src\\cli.ts"
+    }
+  ],
+  "totalFiles": 1,
+  "totalMatches": 14
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\cli-agents.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\fixer.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\ast-node-visitors.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2"><details>
+<summary>Tool use: **run_terminal_command_v2** • Run command: br show stepdown-pno 2&gt;&amp;1; br list --status=closed 2&gt;&amp;1 | Select-String -Pattern &#34;pno|ciq|1np|37b&#34;; rg -n &#34;stepdown-(pno|ciq|1np)&#34; .beads/ 2&gt;&amp;1; br show stepdown-37b 2&gt;&amp;1</summary>
+```bash
+br show stepdown-pno 2>&1; br list --status=closed 2>&1 | Select-String -Pattern "pno|ciq|1np|37b"; rg -n "stepdown-(pno|ciq|1np)" .beads/ 2>&1; br show stepdown-37b 2>&1
+```
+
+```
+Error: Issue not found: stepdown-pno
+Hint: Run 'br list' to see available issues.
+
+✓ stepdown-37b [● P2] [task] - Rename three visit() functions in analyzer.ts
+✓ stepdown-37b · Rename three visit() functions in analyzer.ts   [● P2 · CLOSED]
+Owner: pendragon.josh@gmail.com · Type: task
+Created: 2026-03-03 · Updated: 2026-03-03
+Closed: 2026-03-03 (Renamed four visit() functions to descriptive names)
+
+analyzer.ts has three functions named visit() at different scopes: (1) line 138 inside buildCallGraph, (2) line 169 inside extractFunctions, (3) line 192 at module level. The module-level visit is called by findNestedFunctionViolations at line 63 — 129 lines away. All three experts flagged this (3/3 consensus, 10/10 confidence). Rename to visitForCallGraph, visitForFunctionExtraction, visitForNestedViolations. The tool enforces naming clarity in user code but violates it in its own source.
+
+Dependents:
+  <- stepdown-rls (blocks) - Extract nested violation detection from analyzer.ts
+
+```
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\tests",
+  "pattern": "equivalence|bit-identical|fixFileWithRules|reorderFunctionDeclarations|both paths|useRulePipeline"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\tests",
+  "pattern": "equivalence|bit-identical|fixFileWithRules|reorderFunctionDeclarations|both paths|useRulePipeline",
+  "topFiles": [],
+  "totalFiles": 0,
+  "totalMatches": 0
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "kind:\\s*[\\\"']stepdown|kind:\\s*[\\\"']nested|\\\"dependency\\\" in"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src",
+  "pattern": "kind:\\s*[\\\"']stepdown|kind:\\s*[\\\"']nested|\\\"dependency\\\" in",
+  "topFiles": [
+    {
+      "matchCount": 1,
+      "uri": "src/analyzer.ts"
+    }
+  ],
+  "totalFiles": 1,
+  "totalMatches": 1
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\tests\registry.test.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2"><details>
+<summary>Tool use: **run_terminal_command_v2** • Run command: (Get-Content src\analyzer.ts | Measure-Object -Line).Lines; (Get-ChildItem src\*.ts).Name</summary>
+```bash
+(Get-Content src\analyzer.ts | Measure-Object -Line).Lines; (Get-ChildItem src\*.ts).Name
+```
+
+```
+673
+analyzer.ts
+ast-graph-builder.ts
+ast-node-visitors.ts
+ast-utils.ts
+cli-agents.ts
+cli-errors.ts
+cli-json.ts
+cli-options.ts
+cli-output.ts
+cli-runners.ts
+cli.ts
+exit-codes.ts
+fixer.ts
+graph-algorithms.ts
+index.ts
+nested-rule.ts
+register-default-rules.ts
+registry.ts
+rule-context.ts
+stepdown-rule.ts
+types.ts
+violation-coverage.ts
+
+```
+</details></tool-use>
+
+_**Agent (default)**_
+
+<think><details><summary>Thought Process</summary>
+Checking whether the main `fix` command supports a `--dry-run` option.
+
+The main `fix` command lacks a `--dry-run` flag. The agents `fix` command may support it instead. I will examine the fix command definition more closely.
+</details></think>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\cli.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src\\cli-runners.ts",
+  "pattern": "dryRun|dry-run"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src\\cli-runners.ts",
+  "pattern": "dryRun|dry-run",
+  "topFiles": [],
+  "totalFiles": 0,
+  "totalMatches": 0
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\fixer.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\.beads",
+  "pattern": "stepdown-pno|stepdown-ciq|stepdown-1np"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\.beads",
+  "pattern": "stepdown-pno|stepdown-ciq|stepdown-1np",
+  "topFiles": [],
+  "totalFiles": 0,
+  "totalMatches": 0
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\analyzer.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src\\cli.ts",
+  "pattern": "violation\\.file|\\.file"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\src\\cli.ts",
+  "pattern": "violation\\.file|\\.file",
+  "topFiles": [
+    {
+      "matchCount": 7,
+      "uri": "src\\cli.ts"
+    }
+  ],
+  "totalFiles": 1,
+  "totalMatches": 7
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\src\cli-output.ts</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<think><details><summary>Thought Process</summary>
+The audit is complete. I am preparing the final verdicts and recommendations.
+
+stepdown-00h is PARTIAL. The `--dry-run` flag exists on the agent fix command and pipeline, but the human `fix` command in cli.ts still writes files immediately. It should be kept or deferred.
+
+stepdown-8pt is OPEN. A partial implementation may exist on issue #2.
+
+stepdown-8pt is OPEN. The dependency check remains at analyzer.ts:503. Leaf function removal still mutates state in graph-algorithms.ts:87. Position map keys still use trimmed lines in fixer.ts:239. Only a defensive clone on the caller partially mitigates the second issue.
+
+stepdown-v3a is OPEN. Both legacy paths still exist. No equivalence tests cover them.
+
+stepdown-kz4 is OPEN. Null info values remain in ast-node-visitors.ts, fixer.ts, and ast-graph-builder.ts.
+
+stepdown-bld is OPEN. The dependencyGraph field stays optional in types.ts:42.
+
+stepdown-bru is OPEN. Violation interfaces still declare file as a string in types.ts:21 and 29. Analyzer.ts:433 and 523 still set it to an empty string.
+
+stepdown-74p is OPEN. registry.ts remains a singleton with no createRegistry or reset methods. Tests still depend on execution order.
+
+stepdown-rls is OPEN. Nested violation detection still lives in analyzer.ts around line 673. There is no separate nested-violation-detector.ts. Blocker 37b is closed so this work is unblocked.
+
+stepdown-pno, stepdown-ciq, and stepdown-1np do not exist in br or .beads/. None of the eight beads are fully implemented. Only stepdown-00h is partially done.
+</details></think>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\README.md",
+  "pattern": "dry-run|dryRun"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\README.md",
+  "pattern": "dry-run|dryRun",
+  "topFiles": [
+    {
+      "matchCount": 1,
+      "uri": "README.md"
+    }
+  ],
+  "totalFiles": 1,
+  "totalMatches": 1
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="ripgrep_raw_search"><details>
+<summary>Tool use: **ripgrep_raw_search**</summary>
+
+Parameters:
+
+```json
+{
+  "caseInsensitive": false,
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\tests",
+  "pattern": "createRegistry|reset\\(|info: null|kind === .stepdown"
+}
+```
+Additional data:
+
+```json
+{
+  "isPruned": true,
+  "outputMode": "content",
+  "path": "C:\\Users\\graff\\WebstormProjects\\stepdown-rule\\tests",
+  "pattern": "createRegistry|reset\\(|info: null|kind === .stepdown",
+  "topFiles": [
+    {
+      "matchCount": 1,
+      "uri": "tests/unified-modules.test.ts"
+    }
+  ],
+  "totalFiles": 1,
+  "totalMatches": 1
+}
+```
+Status: **completed**
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="unknown" data-tool-name="update_current_step"><details>
+<summary>Tool use: **update_current_step**</summary>
+An unknown error occurred
+</details></tool-use>
+
+_**Agent (default)**_
+
+<think><details><summary>Thought Process</summary>
+All required information has been gathered to compile the compact markdown table report.
+</details></think>
+
+_**Agent (default)**_
+
+## Bead audit
+
+| ID | Verdict | Evidence | Action |
+|----|---------|----------|--------|
+| **stepdown-00h** | **PARTIAL** | Pipeline + `agents fix` support `--dry-run` (`src/cli-agents.ts:71`, `src/fixer.ts:32,56,108`); human `fix` has no flag (`src/cli.ts:57-74`) | **keep** — add `--dry-run` to human `fix`, or narrow bead & close if agents-only was enough |
+| **stepdown-8pt** | **OPEN** | (1) still `"dependency" in v` (`src/analyzer.ts:503-505`); (2) still mutates Map (`src/graph-algorithms.ts:87-109`), only caller clone (`src/fixer.ts:448-451`); (3) trimmed-line keys (`src/fixer.ts:239-248`) | **keep** |
+| **stepdown-v3a** | **OPEN** | Both paths remain: `fixFileWithRules` (`src/fixer.ts:123`) vs `reorderFunctionDeclarations` (`src/fixer.ts:250`); no equivalence tests in `tests/` | **keep** |
+| **stepdown-kz4** | **OPEN** | `{ node, info: null }` still in `src/ast-node-visitors.ts:54,89,102,120`, `src/fixer.ts:440+`, `src/ast-graph-builder.ts:22` | **keep** |
+| **stepdown-bld** | **OPEN** | Still optional: `dependencyGraph?:` (`src/types.ts:42`); callers still use `?.` (`src/fixer.ts:203`) | **keep** |
+| **stepdown-bru** | **OPEN** | `file: string` on both violation types (`src/types.ts:21,29`); still set to `""` (`src/analyzer.ts:433,523`); CLI uses `result.file` (`src/cli.ts:260`) | **keep** |
+| **stepdown-74p** | **OPEN** | Module singleton `const rules = []` (`src/registry.ts:3-18`); no factory/reset; `tests/registry.test.ts` still order-dependent | **keep** |
+| **stepdown-rls** | **OPEN** | No `nested-violation-detector.ts`; nested logic still in `src/analyzer.ts` (`findNestedFunctionViolations` ~`:64+`); blocker `stepdown-37b` is **CLOSED** | **keep** (unblocked) |
+
+### Missing IDs
+
+| ID | Exists? |
+|----|---------|
+| **stepdown-pno** | **No** — `br show` → Issue not found; not in `.beads/issues.jsonl` |
+| **stepdown-ciq** | **No** — same |
+| **stepdown-1np** | **No** — same |
+
+### Safe to close
+
+**None of the 8** as fully DONE. Closest is **00h** (PARTIAL only). Do **not** invent beads for pno/ciq/1np — already gone.

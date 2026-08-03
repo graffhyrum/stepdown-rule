@@ -1,0 +1,1 @@
+{"schemaVersion":1,"command":"agents/analyze","ok":true,"exitCode":0,"summary":{"files":1,"violations":0,"circularDependencies":0},"results":[{"file":"fixtures/clean.ts","violations":[],"nestedFunctionViolations":[],"circularDependencies":[],"totalFunctions":6}],"errors":[]}

@@ -39,17 +39,23 @@ jobs:
           body: |
             Standalone `stepdown-rule` binaries (Bun runtime embedded; no Bun install required at runtime).
 
-            **Install**
+            **Preferred install** (download → inspect → run):
 
             ```shell
-            curl -fsSL https://graffhyrum.github.io/stepdown-rule/install | bash
+            curl -fsSL -o install.sh https://github.com/graffhyrum/stepdown-rule/releases/latest/download/install.sh
+            less install.sh   # review, then:
+            bash install.sh
             ```
 
             ```powershell
-            irm https://graffhyrum.github.io/stepdown-rule/install.ps1 | iex
+            Invoke-WebRequest -Uri https://github.com/graffhyrum/stepdown-rule/releases/latest/download/install.ps1 -OutFile install.ps1
+            # review install.ps1, then:
+            powershell -File .\install.ps1
             ```
 
-            See README for PATH setup and development installs.
+            Installers verify `SHA256SUMS` before writing the binary. Pin with `VERSION=vX.Y.Z`.
+
+            See README for trust model, pipe-to-shell warnings, and PATH setup.
           files: |
             dist/release/*
             scripts/install.sh

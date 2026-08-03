@@ -1,12 +1,11 @@
 name: Pages
 
+# Pin short install URLs to release tags (not main HEAD) so Pages scripts
+# match the installers attached to the same GitHub Release.
 on:
   push:
-    branches: [main]
-    paths:
-      - "scripts/install.sh"
-      - "scripts/install.ps1"
-      - ".github/workflows/pages.yml"
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:

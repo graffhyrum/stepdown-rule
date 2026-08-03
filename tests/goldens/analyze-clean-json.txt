@@ -1,0 +1,24 @@
+[
+  {
+    "file": "fixtures/clean.ts",
+    "violations": [],
+    "nestedFunctionViolations": [],
+    "circularDependencies": [],
+    "totalFunctions": 6,
+    "dependencyGraph": {
+      "_main": [
+        "createUser",
+        "validateEmail"
+      ],
+      "createUser": [
+        "hashPassword"
+      ],
+      "validateEmail": [],
+      "hashPassword": [],
+      "_processData": [
+        "cleanData"
+      ],
+      "cleanData": []
+    }
+  }
+]

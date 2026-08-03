@@ -6,7 +6,7 @@ classDiagram
     class FixResult
   }
   namespace useCases {
-    class RunPipeline
+    class Pipeline
     class ParseAndBuildContext
     class ExecuteRules
   }
@@ -22,11 +22,11 @@ classDiagram
     class CLI
   }
 
-  RunPipeline --> ParseAndBuildContext
-  RunPipeline --> ExecuteRules
-  RunPipeline --> RuleRegistry
-  RunPipeline --> FileService
-  RunPipeline --> ConfigLoader
+  Pipeline --> ParseAndBuildContext
+  Pipeline --> ExecuteRules
+  Pipeline --> RuleRegistry
+  Pipeline --> FileService
+  Pipeline --> ConfigLoader
   ParseAndBuildContext --> RuleContext
   ParseAndBuildContext --> TypeScriptAPI
   ParseAndBuildContext --> FileService
@@ -38,7 +38,7 @@ classDiagram
   ViolationRule <|.. StepdownRule
   ViolationRule <|.. NestedRule
   RuleRegistry --> ViolationRule
-  CLI --> RunPipeline
+  CLI --> Pipeline
   FileService --> BunFS
   ParseAndBuildContext --> BunFS
 
