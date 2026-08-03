@@ -4117,24 +4117,46 @@ _**User**_
 
 _**Agent (default)**_
 
+<think><details><summary>Thought Process</summary>
+Running a post-mortem.
+
+Reading the workflow and output format references first.
+</details></think>
+
+_**Agent (default)**_
+
+Running the post-mortem workflow for this session.
+
+_**Agent (default)**_
+
 <tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
-<summary>Tool use: **read_file_v2** • Read file: </summary>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\.agents\skills\post-mortem\references\workflow.md</summary>
 
 </details></tool-use>
 
 _**Agent (default)**_
 
 <tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
-<summary>Tool use: **read_file_v2** • Read file: </summary>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\.agents\skills\post-mortem\references\output-format.md</summary>
 
 </details></tool-use>
 
 _**Agent (default)**_
 
 <tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
-<summary>Tool use: **read_file_v2** • Read file: </summary>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\.agents\skills\post-mortem\references\edge-cases.md</summary>
 
 </details></tool-use>
+
+_**Agent (default)**_
+
+<think><details><summary>Thought Process</summary>
+Writing a post-mortem.
+
+Resolving a filename conflict between the skill template and project CLAUDE.md. The skill template requires a `post-mortem-` prefix, but the project convention uses `YYYY-MM-DD-slug.md` without it.
+
+Existing files confirm the project convention. I'll use `YYYY-MM-DD-slug.md` and check the directory.
+</details></think>
 
 _**Agent (default)**_
 
@@ -4142,6 +4164,48 @@ _**Agent (default)**_
 <summary>Tool use: **run_terminal_command_v2** • Run command: ls docs/ 2&gt;$null; if (-not (Test-Path docs)) { echo &#34;MISSING&#34; }; if (-not (Test-Path docs/post-mortems)) { New-Item -ItemType Directory -Path docs/post-mortems | Out-Null; echo &#34;created post-mortems&#34; }; Get-ChildItem docs/post-mortems -Filter &#34;*.md&#34; | Select-Object Name; (Get-ChildItem docs/post-mortems -Filter &#34;post-mortem-*.md&#34; -ErrorAction SilentlyContinue | Measure-Object).Count; (Get-ChildItem docs/post-mortems -Filter &#34;*.md&#34; -ErrorAction SilentlyContinue | Measure-Object).Count</summary>
 ```bash
 ls docs/ 2>$null; if (-not (Test-Path docs)) { echo "MISSING" }; if (-not (Test-Path docs/post-mortems)) { New-Item -ItemType Directory -Path docs/post-mortems | Out-Null; echo "created post-mortems" }; Get-ChildItem docs/post-mortems -Filter "*.md" | Select-Object Name; (Get-ChildItem docs/post-mortems -Filter "post-mortem-*.md" -ErrorAction SilentlyContinue | Measure-Object).Count; (Get-ChildItem docs/post-mortems -Filter "*.md" -ErrorAction SilentlyContinue | Measure-Object).Count
+```
+
+```
+
+    Directory: C:\Users\graff\WebstormProjects\stepdown-rule\docs
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d----            07/26/26    21:32                post-mortems
+-a---            07/26/26    20:32           1335 class.mmd
+-a---            07/26/26    20:32           7647 PRD.md
+-a---            07/26/26    20:32           5625 rule-pipeline-architecture.md
+
+Name : 2026-03-02-circular-dep-exit-code.md
+
+
+Name : 2026-03-02-file-consolidation.md
+
+
+Name : 2026-03-02-fresh-eyes-bug-hunt.md
+
+
+Name : 2026-03-03-expert-review-to-beads.md
+
+
+Name : 2026-03-03-triple-bugfix-session.md
+
+
+Name : 2026-03-03-verbose-help-revert.md
+
+
+Name : 2026-03-17-fixer-four-bugs.md
+
+
+Name : 2026-05-27-cli-executable-accessibility.md
+
+
+Name : 2026-07-26-compile-size-audit.md
+
+0
+9
+
 ```
 </details></tool-use>
 
@@ -4152,7 +4216,73 @@ _**Agent (default)**_
 ```bash
 cm context "bead-cycle doctor repair unilateral defer stale beads triage restore" --json 2>&1; echo "===="; cass search "unilateral defer beads stale cleanup triage" --json --limit 3 2>&1; echo "===="; br diff 2>&1; echo "===="; br history --json 2>&1 | Select-Object -First 40; echo "===="; ms suggest --machine --cwd . 2>&1; echo "===="; gh pr list --state open --json number,title,url --limit 10 2>&1
 ```
+
+```
+[cm] Playbook not found at C:\Users\graff\.cass-memory\playbook.yaml, creating empty one.
+{
+  "success": true,
+  "command": "context",
+  "timestamp": "2026-07-27T02:56:16.399Z",
+  "data": {
+    "task": "bead-cycle doctor repair unilateral defer stale beads triage restore",
+    "relevantBullets": [],
+    "antiPatterns": [],
+    "historySnippets": [
+      {
+        "source_path": "C:\\Users\\graff\\AppData\\Roaming\\Cursor/User\\globalStorage/state.vscdb\\16474d03-89d4-4bd5-a556-dd182b62d9f3",
+        "line_number": 43,
+        "agent": "cursor",
+        "workspace": "",
+        "title": "Bead cycle discussion",
+        "snippet": "Recreating 3 recent **beads** lost during earlier **doctor** **repair** (not the 145d **stale** set). [Tool: Shell - Recreate lost **beads**; verify ready/lint",
+        "score": 0.016393441706895828,
+        "created_at": 1785119092285,
+        "sessionPath": "C:\\Users\\graff\\AppData\\Roaming\\Cursor/User\\globalStorage/state.vscdb\\16474d03-89d4-4bd5-a556-dd182b62d9f3",
+        "timestamp": "1785119092285",
+        "origin": {
+          "kind": "local"
+        }
+      },
+      {
+        "source_path": "C:\\Users\\graff\\AppData\\Roaming\\Cursor/User\\globalStorage/state.vscdb\\189bb048-4eac-488a-a429-bcc1b4cf5c2b",
+        "line_number": 80,
+        "agent": "cursor",
+        "workspace": "",
+        "title": "WaniKani vocabulary practice",
+        "snippet": "Repairing `br **doctor**` warnings so Phase 0 can proceed, then claiming the top `bv` pick",
+        "score": 0.016393441706895828,
+        "created_at": 1785119660006,
+        "sessionPath": "C:\\Users\\graff\\AppData\\Roaming\\Cursor/User\\globalStorage/state.vscdb\\189bb048-4eac-488a-a429-bcc1b4cf5c2b",
+        "timestamp": "1785119660006",
+        "origin": {
+          "kind": "local"
+        }
+      },
+      {
+        "source_path": "C:\\Users\\graff\\AppData\\Roaming\\Cursor/User\\globalStorage/state.vscdb\\3cd4ba78-63d0-47e8-a9f6-169f2b1908b7",
+        "line_number": 31,
+ 
+… (output truncated)
+```
 </details></tool-use>
+
+_**Agent (default)**_
+
+<think><details><summary>Thought Process</summary>
+Checking the PRE_WRITE_COUNT for post-mortem files.
+
+The post-mortem filename follows the project's date-first convention: `2026-07-26-unilateral-bead-deferral.md`. The skill template's `post-mortem-` prefix is overridden by the project standard.
+
+Cross-cutting lessons to add:
+- Never unilaterally defer beads.
+- Ask before mutating the queue on ambiguous cleanup.
+- Ticket age is irrelevant unless the user says otherwise.
+- `br doctor -q` environment warnings should not be conflated with a broken workspace.
+
+Dependencies belong in dependency metadata, not deferral notes. Do not invent defer-until dates.
+
+Vault harvest needs checking. The workflow is write the post-mortem, then add lessons via cm. The skill threshold expects three files, but the project uses nine date-first files; I will note this naming mismatch. Now writing the post-mortem.
+</details></think>
 
 _**Agent (default)**_
 
@@ -4161,11 +4291,183 @@ _**Agent (default)**_
 ```bash
 cm add --help 2>&1 | Select-Object -First 30; br list --status=open --json 2>&1 | bun -e "const a=JSON.parse(require('fs').readFileSync(0,'utf8')); console.log(a.map(x=>x.id+':'+x.status+':P'+x.priority).join('\n'))"
 ```
+
+```
+Usage: cm add [options] [content]
+
+Alias for `cm playbook add`
+
+Arguments:
+  content           Rule content (required unless using --file)
+
+Options:
+  --category <cat>  Category (default: "general")
+  --file <path>     Batch add from JSON file (use '-' for stdin)
+  --session <path>  Session path to track in onboarding progress
+  --check           Show validation results before adding
+  --strict          With --check, fail on warnings instead of adding
+  -j, --json        Output JSON
+  -h, --help        display help for command
+
+Examples:
+  cm add "Always validate user input" --category security --json
+  cm add --file rules.json --check --json
+  cm add --file - --json
+
+
+```
 </details></tool-use>
 
 _**Agent (default)**_
 
 <tool-use data-tool-type="read" data-tool-name="read_file_v2"><details>
-<summary>Tool use: **read_file_v2** • Read file: </summary>
+<summary>Tool use: **read_file_v2** • Read file: C:\Users\graff\WebstormProjects\stepdown-rule\docs\post-mortems\2026-07-26-compile-size-audit.md</summary>
 
 </details></tool-use>
+
+_**Agent (default)**_
+
+<think><details><summary>Thought Process</summary>
+Post-mortems vary in format. Older versions may be more structured.
+
+The skill template will be used. The filename follows the `YYYY-MM-DD-slug.md` pattern. CM lessons will be added before writing the file.
+</details></think>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2"><details>
+<summary>Tool use: **edit_file_v2** • Edit file: C:\Users\graff\WebstormProjects\stepdown-rule\docs\post-mortems\2026-07-26-unilateral-bead-deferral.md</summary>
+
+</details></tool-use>
+
+_**Agent (default)**_
+
+<think><details><summary>Thought Process</summary>
+Cross-cutting lessons will be added first. Then the report summary will follow.
+
+The literal skill threshold was not met because the `post-mortem-*.md` pattern had zero matches. Ten date-prefixed post-mortems exist instead. A naming convention mismatch was noted. Lessons will still be added.
+</details></think>
+
+_**Agent (default)**_
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2"><details>
+<summary>Tool use: **run_terminal_command_v2** • Run command: cm add &#34;Never run br defer or bd defer unless the user explicitly requests deferral for named issue IDs; do not invent defer-until dates.&#34; --category general --json 2&gt;&amp;1
+cm add &#34;Ticket age and br stale are diagnostics only — not authorization to remove issues from the ready queue.&#34; --category general --json 2&gt;&amp;1
+cm add &#34;Encode task dependencies with br dep metadata; never use deferral as a substitute for blocking relationships.&#34; --category general --json 2&gt;&amp;1
+cm add &#34;On ambiguous cleanup/hygiene/park language for beads, ask before mutating status, priority, or dependencies.&#34; --category general --json 2&gt;&amp;1
+echo &#34;====&#34;
+# count cm rules roughly
+cm playbook list --json 2&gt;&amp;1 | bun -e &#34;try{const j=JSON.parse(require(&#39;fs&#39;).readFileSync(0,&#39;utf8&#39;)); const n=j.data?.bullets?.length??j.bullets?.length??j.length??JSON.stringify(j).length; console.log(typeof n===&#39;number&#39;?(&#39;countish &#39;+n):JSON.stringify(j).slice(0,200))}catch(e){console.log(String(e))}&#34; 2&gt;&amp;1
+(Get-ChildItem docs/post-mortems -Filter &#34;*.md&#34;).Count
+(Get-ChildItem docs/post-mortems -Filter &#34;post-mortem-*.md&#34; -ErrorAction SilentlyContinue).Count
+</summary>
+```bash
+cm add "Never run br defer or bd defer unless the user explicitly requests deferral for named issue IDs; do not invent defer-until dates." --category general --json 2>&1
+cm add "Ticket age and br stale are diagnostics only — not authorization to remove issues from the ready queue." --category general --json 2>&1
+cm add "Encode task dependencies with br dep metadata; never use deferral as a substitute for blocking relationships." --category general --json 2>&1
+cm add "On ambiguous cleanup/hygiene/park language for beads, ask before mutating status, priority, or dependencies." --category general --json 2>&1
+echo "===="
+# count cm rules roughly
+cm playbook list --json 2>&1 | bun -e "try{const j=JSON.parse(require('fs').readFileSync(0,'utf8')); const n=j.data?.bullets?.length??j.bullets?.length??j.length??JSON.stringify(j).length; console.log(typeof n==='number'?('countish '+n):JSON.stringify(j).slice(0,200))}catch(e){console.log(String(e))}" 2>&1
+(Get-ChildItem docs/post-mortems -Filter "*.md").Count
+(Get-ChildItem docs/post-mortems -Filter "post-mortem-*.md" -ErrorAction SilentlyContinue).Count
+
+```
+
+```
+{
+  "success": true,
+  "command": "playbook:add",
+  "timestamp": "2026-07-27T02:57:18.024Z",
+  "data": {
+    "bullet": {
+      "id": "b-ms2mz4cj-b0zy0d",
+      "content": "Never run br defer or bd defer unless the user explicitly requests deferral for named issue IDs; do not invent defer-until dates.",
+      "category": "general",
+      "kind": "workflow_rule",
+      "type": "rule",
+      "isNegative": false,
+      "scope": "global",
+      "source": "learned",
+      "tags": [],
+      "state": "draft",
+      "maturity": "candidate",
+      "createdAt": "2026-07-27T02:57:18.019Z",
+      "updatedAt": "2026-07-27T02:57:18.019Z",
+      "sourceSessions": [
+        "manual-cli"
+      ],
+      "sourceAgents": [
+        "unknown"
+      ],
+      "helpfulCount": 0,
+      "harmfulCount": 0,
+      "feedbackEvents": [],
+      "deprecated": false,
+      "pinned": false,
+      "confidenceDecayHalfLifeDays": 90
+    },
+    "target": "global",
+    "targetPath": "~/.cass-memory/playbook.yaml"
+  },
+  "metadata": {
+    "executionMs": 50,
+    "version": "0.2.12"
+  }
+}
+[cm] Playbook not found at C:\Users\graff\.cass-memory\playbook.yaml, creating empty one.
+{
+  "success": true,
+  "command": "playbook:add",
+  "timestamp": "2026-07-27T02:57:18.239Z",
+  "data": {
+    "bullet": {
+      "id": "b-ms2mz4ih-a5n09e",
+      "content": "Ticket age and br stale are diagnostics only — not authorization to remove issues from the ready queue.",
+      "category": "general",
+      "kind": "workflow_rule",
+      "type": "rule",
+      "isNegative": false,
+      "scope": "global",
+      "source": "learned",
+      "tags": [],
+      "state": "draft",
+      "maturity": "candidate",
+      "createdAt": "2026-07-27T02:57:18.233Z",
+      "updatedAt": "2026-07-27T02:57:18.233Z",
+      "sourceSessions": [
+        "manual-cli"
+      ],
+      "sourceAgents": [
+        "unknown"
+      ],
+      "helpfulCount": 0,
+      "harmfulCount": 0,
+      "feedbackEvents": [],
+      "deprecated": false,
+      "pinned": false,
+      "
+… (output truncated)
+```
+</details></tool-use>
+
+_**Agent (default)**_
+
+<think><details><summary>Thought Process</summary>
+Checking PRE_WRITE_COUNT for post-mortem files.
+
+No distillation suggestion was triggered by the literal skill. The project contains ten date-prefixed post-mortems. Distillation is deferred because the skill threshold requires at least three matches. Preparing the agent response summary format.
+</details></think>
+
+_**Agent (default)**_
+
+```
+POST-MORTEM [mode: default]
+
+File: docs/post-mortems/2026-07-26-unilateral-bead-deferral.md
+Pending post-mortems: 0 matching `post-mortem-*.md` (project uses `YYYY-MM-DD-*.md`: 10 files)
+cm: 4 lessons added (total: 4) — b-ms2mz4cj-b0zy0d, b-ms2mz4ih-a5n09e, b-ms2mz4ol-b3mpo6, b-ms2mz4un-wqqmau
+Distillation: deferred (skill gate uses `post-mortem-*.md` count 0/3)
+```
+
+Core failure: invented “cleanup = defer stale P2s” with fake `+90d`. Remediation already applied (restore + global no-defer rule). Top follow-up: Tier-1 hook to block unilateral `br defer`.
