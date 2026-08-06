@@ -4,15 +4,15 @@ Use **`stepdown-rule agents`** commands for automation. Human-oriented `analyze`
 
 ## Commands
 
-| Task | Command |
-|------|---------|
-| Find violations | `stepdown-rule agents analyze '<glob>'` |
-| Preview fixes | `stepdown-rule agents fix '<glob>' --dry-run` |
-| Apply fixes | `stepdown-rule agents fix '<glob>'` |
-| Config schema | `stepdown-rule agents schema config` |
-| Analyze output schema | `stepdown-rule agents schema analyze-output` |
-| Fix output schema | `stepdown-rule agents schema fix-output` |
-| Rule IDs | `stepdown-rule agents schema rules` |
+| Task                  | Command                                       |
+|-----------------------|-----------------------------------------------|
+| Find violations       | `stepdown-rule agents analyze '<glob>'`       |
+| Preview fixes         | `stepdown-rule agents fix '<glob>' --dry-run` |
+| Apply fixes           | `stepdown-rule agents fix '<glob>'`           |
+| Config schema         | `stepdown-rule agents schema config`          |
+| Analyze output schema | `stepdown-rule agents schema analyze-output`  |
+| Fix output schema     | `stepdown-rule agents schema fix-output`      |
+| Rule IDs              | `stepdown-rule agents schema rules`           |
 
 Always **quote globs** for the shell: `'src/**/*.ts'`.
 
@@ -25,7 +25,7 @@ flowchart TD
   analyze --> violations{violations?}
   violations -->|no| done[Done exit 0]
   violations -->|yes| circular{circular deps?}
-  circular -->|blocks fix| report[Report cycles; refactor manually]
+  circular -->|blocks fix| report[Report cycles - refactor manually]
   circular -->|no| dry[agents fix --dry-run]
   dry --> ok{preview OK?}
   ok -->|yes| fix[agents fix]
@@ -35,14 +35,14 @@ flowchart TD
 
 ## Exit codes
 
-| Code | Meaning | Agent action |
-|------|---------|----------------|
-| 0 | Success | Continue |
-| 1 | Violations (analyze) or fix errors | Read `results` / fix input |
-| 2 | Usage error | Fix command line |
-| 3 | No files matched | Check globs and `--ignore` |
-| 4 | Invalid config | Fix `.stepdownrc.json` |
-| 5 | Internal error | Retry or escalate |
+| Code | Meaning                            | Agent action               |
+|------|------------------------------------|----------------------------|
+| 0    | Success                            | Continue                   |
+| 1    | Violations (analyze) or fix errors | Read `results` / fix input |
+| 2    | Usage error                        | Fix command line           |
+| 3    | No files matched                   | Check globs and `--ignore` |
+| 4    | Invalid config                     | Fix `.stepdownrc.json`     |
+| 5    | Internal error                     | Retry or escalate          |
 
 ## Output contract
 
