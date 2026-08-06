@@ -1,0 +1,16 @@
+{
+	"description": "Blocking quality gate: run bun vet on agent turn completion. Failures block stop and feed failure output back to the agent.",
+	"hooks": {
+		"Stop": [
+			{
+				"hooks": [
+					{
+						"type": "command",
+						"command": "bun .cursor/hooks/vet-stop.ts",
+						"timeout": 600
+					}
+				]
+			}
+		]
+	}
+}

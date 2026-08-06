@@ -1,22 +1,30 @@
 /**
- * Cursor stop hook: run `bun vet` after each agent turn.
- * Failures return followup_message (exit 0) so Cursor prompts the agent.
- * Raw non-zero exits fail-open and never reach the agent.
+ * Stop hook: run `bun vet` after each agent turn (Cursor + Grok).
+ * Always exits 0 so harness fail-open never drops the agent loop.
+ * - `bun vet` non-zero → block finish with failure context:
+ *   Cursor: `followup_message`; Grok: `decision: "block"` + `reason`
+ * - parse fail / non-completed / session-end / skip → stdout `{}`
  *
  * Opt-in env:
  * - STEPDOWN_VET_SKIP_NO_CODE=1 — skip vet when git porcelain has no code paths
  * - STEPDOWN_VET_SCRUB_ENV=1 — redact secret-like env values in followup_message
  */
 import { stdin } from "bun";
-
-type StopStatus = "completed" | "aborted" | "error";
-type StopHookInput = { status: StopStatus };
-type StopHookOutput = Record<string, never> | { followup_message: string };
+import {
+	type StopHookInput,
+	type StopHookOutput,
+	StopHookInputSchema,
+	StopHookOutputSchema,
+	blockStopOutput,
+	parseHookPayload,
+	shouldRunStopGate,
+} from "./hook-schema";
 
 const MAX_OUTPUT_CHARS = 12_000;
 const MAX_STDIN_CHARS = 8_192;
 const VET_TIMEOUT_MS = 280_000;
-const STOP_STATUSES = new Set<string>(["completed", "aborted", "error"]);
+const ENV_SKIP_NO_CODE = "STEPDOWN_VET_SKIP_NO_CODE";
+const ENV_SCRUB_ENV = "STEPDOWN_VET_SCRUB_ENV";
 const SECRET_ENV_KEY = /SECRET|TOKEN|PASSWORD|API[_-]?KEY|CREDENTIAL|PRIVATE[_-]?KEY|AUTH/i;
 const MIN_SECRET_VALUE_LEN = 8;
 const ROOT_CODE_FILES = new Set([
@@ -38,42 +46,51 @@ export async function main(): Promise<void> {
 		return;
 	}
 
-	if (input.status !== "completed") {
+	if (!shouldRunStopGate(input)) {
 		emit({});
 		return;
 	}
 
-	if (process.env.STEPDOWN_VET_SKIP_NO_CODE === "1") {
+	if (process.env[ENV_SKIP_NO_CODE] === "1") {
 		const hasCode = await hasRelevantCodeChanges();
 		if (!hasCode) {
-			console.error("[vet-stop] skip: no code changes (STEPDOWN_VET_SKIP_NO_CODE=1)");
+			console.error(`[vet-stop] skip: no code changes (${ENV_SKIP_NO_CODE}=1)`);
 			emit({});
 			return;
 		}
 	}
 
+	const commandLabel = vetCommand().join(" ");
 	try {
 		const { exitCode, stdout, stderr } = await runVet();
 		if (exitCode === 0) {
 			emit({});
 			return;
 		}
-		console.error(`[vet-stop] bun vet exited ${exitCode}`);
-		emit({ followup_message: buildFollowup(exitCode, stdout, stderr) });
+		console.error(`[vet-stop] ${commandLabel} exited ${exitCode}`);
+		emit(blockStopOutput(buildFollowup(exitCode, stdout, stderr, commandLabel)));
 	} catch (error) {
 		console.error("[vet-stop] vet run failed", error);
-		emit({
-			followup_message: buildFollowup(
-				1,
-				"",
-				error instanceof Error ? error.message : String(error),
+		emit(
+			blockStopOutput(
+				buildFollowup(1, "", error instanceof Error ? error.message : String(error), commandLabel),
 			),
-		});
+		);
 	}
 }
 
+function vetCommand(): string[] {
+	const override = process.env.STEPDOWN_VET_CMD?.trim();
+	if (override) {
+		// Windows-friendly: split on spaces; quote-aware parsing not required for smoke overrides
+		return override.split(/\s+/).filter(Boolean);
+	}
+	return ["bun", "vet"];
+}
+
 async function runVet(): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-	const proc = Bun.spawn(["bun", "vet"], {
+	const cmd = vetCommand();
+	const proc = Bun.spawn(cmd, {
 		cwd: process.cwd(),
 		stdout: "pipe",
 		stderr: "pipe",
@@ -125,15 +142,21 @@ function keepTail(text: string, maxChars: number): string {
 	return text.slice(text.length - maxChars);
 }
 
-export function buildFollowup(exitCode: number, stdout: string, stderr: string): string {
+export function buildFollowup(
+	exitCode: number,
+	stdout: string,
+	stderr: string,
+	commandLabel = "bun vet",
+): string {
 	const combined = [stdout, stderr]
 		.filter((s) => s.trim().length > 0)
 		.join("\n")
 		.trim();
 	const body = sanitizeFence(combined || "(no output captured)");
-	const truncated = body.length >= MAX_OUTPUT_CHARS ? `…(truncated)\n${body}` : body;
+	const truncated =
+		body.length > MAX_OUTPUT_CHARS ? `…(truncated)\n${keepTail(body, MAX_OUTPUT_CHARS)}` : body;
 	const message = [
-		`Stop hook: \`bun vet\` failed (exit code ${exitCode}).`,
+		`Stop hook: \`${commandLabel}\` failed (exit code ${exitCode}).`,
 		"Fix every issue in the untrusted tool output below, then end the turn so the hook re-runs.",
 		"",
 		"```text",
@@ -151,14 +174,11 @@ export function scrubEnvSecrets(
 	text: string,
 	env: Record<string, string | undefined> = process.env,
 ): string {
-	if (env.STEPDOWN_VET_SCRUB_ENV !== "1") {
+	if (env[ENV_SCRUB_ENV] !== "1") {
 		return text;
 	}
 	let out = text;
 	for (const [key, value] of Object.entries(env)) {
-		if (key === "STEPDOWN_VET_SCRUB_ENV" || key === "STEPDOWN_VET_SKIP_NO_CODE") {
-			continue;
-		}
 		if (!value || value.length < MIN_SECRET_VALUE_LEN) {
 			continue;
 		}
@@ -178,6 +198,7 @@ export function isCodePath(path: string): boolean {
 	return (
 		normalized.startsWith("src/") ||
 		normalized.startsWith("tests/") ||
+		normalized.startsWith("fixtures/") ||
 		normalized.startsWith("scripts/") ||
 		normalized.startsWith(".cursor/hooks/")
 	);
@@ -196,17 +217,22 @@ export function porcelainHasCodeChanges(porcelain: string): boolean {
 	return false;
 }
 
+/** Best-effort porcelain path (destination on renames). Split rename before unquote. */
 function porcelainPath(line: string): string | null {
 	if (line.length < 4) {
 		return null;
 	}
-	let rest = line.slice(3);
-	if (rest.startsWith('"') && rest.endsWith('"')) {
-		rest = rest.slice(1, -1).replaceAll('\\"', '"');
-	}
+	const rest = line.slice(3);
 	const arrow = rest.lastIndexOf(" -> ");
 	const raw = arrow >= 0 ? rest.slice(arrow + 4) : rest;
-	return raw.replaceAll("\\", "/");
+	return unquoteGitPath(raw.trim()).replaceAll("\\", "/");
+}
+
+function unquoteGitPath(path: string): string {
+	if (path.length >= 2 && path.startsWith('"') && path.endsWith('"')) {
+		return path.slice(1, -1).replaceAll('\\"', '"').replaceAll("\\\\", "\\");
+	}
+	return path;
 }
 
 async function hasRelevantCodeChanges(): Promise<boolean> {
@@ -234,22 +260,12 @@ async function readStopInput(): Promise<StopHookInput> {
 	if (!text.trim()) {
 		return { status: "completed" };
 	}
-	return parseStopInput(JSON.parse(text));
-}
-
-function parseStopInput(value: unknown): StopHookInput {
-	if (typeof value !== "object" || value === null || !("status" in value)) {
-		throw new Error("stop hook stdin missing status");
-	}
-	const status = (value as { status: unknown }).status;
-	if (typeof status !== "string" || !STOP_STATUSES.has(status)) {
-		throw new Error(`invalid stop status: ${String(status)}`);
-	}
-	return { status: status as StopStatus };
+	return parseHookPayload(StopHookInputSchema, JSON.parse(text));
 }
 
 function emit(payload: StopHookOutput): void {
-	process.stdout.write(`${JSON.stringify(payload)}\n`);
+	const validated = parseHookPayload(StopHookOutputSchema, payload);
+	process.stdout.write(`${JSON.stringify(validated)}\n`);
 }
 
 if (import.meta.main) {
