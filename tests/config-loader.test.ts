@@ -26,7 +26,7 @@ test("loadConfig invalid JSON throws", async () => {
 	await withTempFile(
 		"{ not json",
 		async (file) => {
-			await expect(loadConfig(file)).rejects.toThrow(/Invalid JSON in config file/);
+			expect(loadConfig(file)).rejects.toThrow(/Invalid JSON in config file/);
 		},
 		undefined,
 		"rc.json",
@@ -37,7 +37,7 @@ test("loadConfig schema failure throws", async () => {
 	await withTempFile(
 		JSON.stringify({ ignore: "not-an-array" }),
 		async (file) => {
-			await expect(loadConfig(file)).rejects.toThrow(/Config validation failed/);
+			expect(loadConfig(file)).rejects.toThrow(/Config validation failed/);
 		},
 		undefined,
 		"rc.json",
