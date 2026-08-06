@@ -15,7 +15,7 @@ export interface NestedFuncEdge {
 	to: string;
 }
 /**
- * Shared block-order model for nested detect + fix.
+ * Shared block-order model for nested detect and fix.
  *
  * Detect: nestedFunc before last logic line, name ∉ referencedNested → violation.
  * Fix: pinned (logic|other|referenced nested) in source order, then movable

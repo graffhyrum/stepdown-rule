@@ -8,7 +8,7 @@ import type { FileServiceOptions, IFileService, ParsedFile } from "./types";
 const IGNORED_DIRS = ["node_modules", "dist", "coverage"];
 
 export class FileService implements IFileService {
-	private ignore: string[];
+	private readonly ignore: string[];
 
 	constructor(options: FileServiceOptions = {}) {
 		this.ignore = options.ignore ?? [];

@@ -44,10 +44,8 @@ export function createReporter(format: CliFormat): Reporter {
 			return createJsonReporter();
 		case "agents":
 			return createAgentsReporter();
-		default: {
-			const _exhaustive: never = format;
-			throw new Error(`Unknown report format: ${String(_exhaustive)}`);
-		}
+		default:
+			return assertNeverFormat(format);
 	}
 }
 function createJsonReporter(): Reporter {
@@ -66,6 +64,9 @@ function createJsonReporter(): Reporter {
 			return exitCodeFromErrors(errors);
 		},
 	};
+}
+function assertNeverFormat(format: never): never {
+	throw new Error(`Unknown report format: ${String(format)}`);
 }
 export function resolveFormat(options: { json?: boolean; format?: string }): CliFormat {
 	if (options.format === "human" || options.format === "json" || options.format === "agents") {
