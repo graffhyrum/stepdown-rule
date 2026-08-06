@@ -60,17 +60,18 @@ describe("FileService.resolveFiles", () => {
 });
 
 describe("FileService.writeFile", () => {
-	test("rejects when writing to node_modules", async () => {
+	test("rejects when writing to node_modules", () => {
 		const service = new FileService();
 		const target = join(tmpDir, "node_modules", "bad.ts");
 
-		await expect(service.writeFile(target, "bad")).rejects.toThrow("protected path");
+		// Bun types toThrow as void (not Promise); runner still tracks the rejection.
+		expect(service.writeFile(target, "bad")).rejects.toThrow("protected path");
 	});
 
-	test("rejects when writing to .git", async () => {
+	test("rejects when writing to .git", () => {
 		const service = new FileService();
 		const target = join(tmpDir, ".git", "config");
 
-		await expect(service.writeFile(target, "bad")).rejects.toThrow("protected path");
+		expect(service.writeFile(target, "bad")).rejects.toThrow("protected path");
 	});
 });

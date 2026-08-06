@@ -1,9 +1,9 @@
 import { beforeAll, expect, test } from "bun:test";
-import ts from "typescript";
-import { analyzeFiles, analyzeParsedFile } from "../src/analyzer";
-import { fixFiles, fixParsedFile } from "../src/fixer";
+import { analyzeFiles } from "../src/analyzer";
+import { fixFileWithRules, fixFiles } from "../src/fixer";
 import { registerDefaultRules } from "../src/register-default-rules";
-import { clear } from "../src/registry";
+import { clear, getEnabled } from "../src/registry";
+import { InMemoryFileService } from "../src/services/InMemoryFileService";
 import { analyzeCode, fixCode, fixConfig, totalViolations, withTempFile } from "./helpers";
 
 beforeAll(() => {
@@ -11,8 +11,8 @@ beforeAll(() => {
 	registerDefaultRules();
 });
 
-/** fixParsedFile with analysisResult reorders caller above callee. */
-test("fixParsedFile with analysis reorders caller above callee", () => {
+/** Rule-based fix reorders caller above callee. */
+test("fixFileWithRules reorders caller above callee", () => {
 	const content = `
 function helper() {
 	return "helper result";
@@ -22,16 +22,11 @@ function main() {
 	return helper();
 }
 `;
-	const sourceFile = ts.createSourceFile("test.ts", content, ts.ScriptTarget.Latest, true);
-	const parsedFile = { sourceFile, filePath: "test.ts", content };
-	const analysis = analyzeParsedFile(parsedFile);
-
-	expect(analysis.violations.length).toBeGreaterThan(0);
-
-	const result = fixParsedFile({
-		content,
+	const result = fixFileWithRules({
 		filePath: "test.ts",
-		analysisResult: analysis,
+		originalContent: content,
+		enabledRules: getEnabled(),
+		service: new InMemoryFileService(),
 	});
 
 	expect(result.fixed).toBe(true);

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { analyzeParsedFile, analyzeWithRules } from "../src/analyzer";
+// Intentionally uses deprecated legacy fixer for characterization vs rules path.
+// noinspection JSDeprecatedSymbols
 import { fixFileWithRules, fixParsedFile } from "../src/fixer";
-import { createRegistry } from "../src/registry";
 import { registerDefaultRules } from "../src/register-default-rules";
+import { createRegistry } from "../src/registry";
 import { FileService } from "../src/services/FileService";
 
 const service = new FileService();
@@ -16,6 +18,7 @@ async function loadFixture(name: string): Promise<string> {
 
 function legacyFix(content: string, filePath = "test.ts"): string {
 	const analysis = analyzeParsedFile(service.parseContent(content, filePath));
+	// noinspection JSDeprecatedSymbols
 	return fixParsedFile({
 		content,
 		filePath,

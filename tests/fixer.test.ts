@@ -1,9 +1,9 @@
 import { beforeAll, expect, test } from "bun:test";
 import ts from "typescript";
-import { fixFileWithRules, fixFiles, fixParsedFile } from "../src/fixer";
+import { fixFileWithRules, fixFiles } from "../src/fixer";
 import { registerDefaultRules } from "../src/register-default-rules";
 import type { RuleContext, Violation, ViolationRule } from "../src/rule-context";
-import { clear } from "../src/registry";
+import { clear, getEnabled } from "../src/registry";
 import { InMemoryFileService } from "../src/services/InMemoryFileService";
 import { analyzeCode, fixCode, fixConfig, withTempFile } from "./helpers";
 
@@ -320,25 +320,30 @@ function helper(){return 1;}`;
 	expect(result.reordered).toBe(0);
 });
 
-test("compliant file fixParsedFile reports fixed=false", () => {
+test("compliant file fixFileWithRules reports fixed=false", () => {
 	const code = `function main() { return helper(); }
 function helper() { return "helper"; }`;
 	const analysis = analyzeCode(code);
 	expect(analysis.violations).toHaveLength(0);
-	const result = fixParsedFile({
-		content: code,
+	const result = fixFileWithRules({
 		filePath: "test.ts",
-		analysisResult: analysis,
+		originalContent: code,
+		enabledRules: getEnabled(),
+		service: new InMemoryFileService(),
 	});
 	expect(result.fixed).toBe(false);
 	expect(result.fixedContent).toBe(code);
 });
 
-test("fixParsedFile no-op when reorder leaves printed AST unchanged", () => {
+test("fixFileWithRules no-op when reorder leaves printed AST unchanged", () => {
 	const code = `function main() { return helper(); }
 function helper() { return "helper"; }`;
-	// Omit analysisResult so reorder runs; compliant order still prints equal.
-	const result = fixParsedFile({ content: code, filePath: "test.ts" });
+	const result = fixFileWithRules({
+		filePath: "test.ts",
+		originalContent: code,
+		enabledRules: getEnabled(),
+		service: new InMemoryFileService(),
+	});
 	expect(result.fixed).toBe(false);
 	expect(result.reordered).toBe(0);
 });

@@ -45,9 +45,10 @@ describe("InMemoryFileService", () => {
 		expect(await service.readFile("x.ts")).toBe("export const n = 1;");
 	});
 
-	test("read missing path throws ENOENT", async () => {
+	test("read missing path throws ENOENT", () => {
 		const service = new InMemoryFileService({ "x.ts": "export {}" });
-		await expect(service.readFile("missing.ts")).rejects.toThrow("ENOENT");
+		// Bun types toThrow as void (not Promise); runner still tracks the rejection.
+		expect(service.readFile("missing.ts")).rejects.toThrow("ENOENT");
 	});
 
 	test("Pipeline analyze+fix on string source — no temp dir", async () => {
