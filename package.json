@@ -1,6 +1,6 @@
 {
 	"name": "@stepdown/analyzer",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"private": true,
 	"description": "TypeScript AST analyzer that enforces the stepdown rule for function organization",
 	"keywords": [
@@ -18,7 +18,7 @@
 		"url": "https://github.com/graffhyrum/stepdown-rule.git"
 	},
 	"bin": {
-		"stepdown-rule": "./dist/cli.js"
+		"stepdown-rule": "./src/cli.ts"
 	},
 	"files": [
 		"dist",
