@@ -1,5 +1,18 @@
 # @stepdown/analyzer
 
+## 0.4.0
+
+### Minor Changes
+
+- 0f067e6: Unify the fix path: `fixFiles` takes an options object, Config drops the unused `fix` flag (Pipeline `mode` is the switch), and `fixFileWithRules` lives in `rule-fix` so Pipeline no longer cycles with the fixer facades. `fixParsedFile` is deprecated.
+- 5e1ce64: Make the vet-stop gate work for both Cursor and Grok via shared ArkType hook schemas, dual block/followup output, and optional `STEPDOWN_VET_CMD`.
+
+### Patch Changes
+
+- 7505982: Extract shared `countFunctionMovements` into `function-movement` so fixer and rule-fix no longer duplicate reorder metrics.
+- 5cde888: Separate config file I/O from JSON parse and schema validation so missing files still fall back to defaults without masking parse errors.
+- 894db5a: Bump commander, TypeScript, oxfmt, @types/node, and @typescript/native-preview dependencies.
+
 ## 0.3.0
 
 ### Minor Changes
