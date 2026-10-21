@@ -45,7 +45,8 @@
 		"fastvet": "bun run build && bun typecheck && bun fix && bun run custom-hooks  && bun run test:coverage",
 		"vet": "bun fastvet",
 		"changeset": "changeset",
-		"version": "changeset version"
+		"version": "changeset version",
+		"release": "changeset tag && git push origin --follow-tags"
 	},
 	"dependencies": {
 		"arktype": "^2.2.3",
