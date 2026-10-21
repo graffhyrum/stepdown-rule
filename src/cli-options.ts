@@ -8,7 +8,7 @@ export const patternsArgument = new Argument(
 export const ignoreOption = new Option(
 	"--ignore <patterns...>",
 	"Glob patterns to exclude from analysis (e.g. 'dist/**' '**/*.test.ts')",
-).default([]);
+);
 
 export const configOption = new Option(
 	"--config <file>",

@@ -48,7 +48,7 @@ export class FileService implements IFileService {
 function applyIgnore(paths: string[], patterns: string[]): string[] {
 	if (patterns.length === 0) return paths;
 	const normalized = patterns.map(toPosixPath);
-	return paths.filter((p) => !normalized.some((pat) => minimatch(p, pat)));
+	return paths.filter((p) => !normalized.some((pat) => minimatch(p, pat, { matchBase: true })));
 }
 
 async function normalizePattern(pattern: string): Promise<string> {
