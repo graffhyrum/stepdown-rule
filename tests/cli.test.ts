@@ -3,7 +3,7 @@ import { beforeAll, expect, test } from "bun:test";
 import { registerDefaultRules } from "../src/register-default-rules";
 import { clear } from "../src/registry";
 import { runCli } from "./cli-harness";
-import { withTempFile } from "./helpers";
+import { cleanupTempDir, createTempDir, withTempFile } from "./helpers";
 
 beforeAll(() => {
 	clear();
@@ -213,6 +213,83 @@ for (const command of ["analyze", "fix"] as const) {
 		expect(envelope.errors.some((e) => e.code === "NO_FILES")).toBe(true);
 	});
 }
+
+test("config file ignore patterns are respected", async () => {
+	const dirName = `config-ignore-${Date.now()}`;
+	const dir = createTempDir(dirName);
+	const relDir = `tests/${dirName}`;
+	try {
+		await Bun.write(`${dir}/keep.ts`, "export const keep = 1;\n");
+		await Bun.write(`${dir}/skip.ts`, "export const skip = 2;\n");
+		await Bun.write(
+			`${dir}/.stepdownrc.json`,
+			JSON.stringify({ ignore: ["skip.ts"] }),
+		);
+
+		const result = await runCli([
+			"analyze",
+			`${relDir}/*.ts`,
+			"--config",
+			`${relDir}/.stepdownrc.json`,
+		]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("1 file analyzed");
+	} finally {
+		cleanupTempDir(dir);
+	}
+});
+
+test("config file basename ignore patterns are respected", async () => {
+	const dirName = `config-basename-ignore-${Date.now()}`;
+	const dir = createTempDir(dirName);
+	const relDir = `tests/${dirName}`;
+	try {
+		await Bun.write(`${dir}/keep.ts`, "export const keep = 1;\n");
+		await Bun.write(`${dir}/foo.test.ts`, "export const testValue = 2;\n");
+		await Bun.write(
+			`${dir}/.stepdownrc.json`,
+			JSON.stringify({ ignore: ["*.test.ts"] }),
+		);
+
+		const result = await runCli([
+			"analyze",
+			`${relDir}/*.ts`,
+			"--config",
+			`${relDir}/.stepdownrc.json`,
+		]);
+		expect(result.exitCode).toBe(0);
+		expect(result.stdout).toContain("1 file analyzed");
+	} finally {
+		cleanupTempDir(dir);
+	}
+});
+
+test("agents analyze config file ignore patterns are respected", async () => {
+	const dirName = `config-agents-ignore-${Date.now()}`;
+	const dir = createTempDir(dirName);
+	const relDir = `tests/${dirName}`;
+	try {
+		await Bun.write(`${dir}/keep.ts`, "export const keep = 1;\n");
+		await Bun.write(`${dir}/skip.ts`, "export const skip = 2;\n");
+		await Bun.write(
+			`${dir}/.stepdownrc.json`,
+			JSON.stringify({ ignore: ["skip.ts"] }),
+		);
+
+		const result = await runCli([
+			"agents",
+			"analyze",
+			`${relDir}/*.ts`,
+			"--config",
+			`${relDir}/.stepdownrc.json`,
+		]);
+		expect(result.exitCode).toBe(0);
+		const envelope = JSON.parse(result.stdout) as { summary: { files: number } };
+		expect(envelope.summary.files).toBe(1);
+	} finally {
+		cleanupTempDir(dir);
+	}
+});
 
 test("agents analyze bad config yields ok:false CONFIG_ERROR", async () => {
 	await withTempFile(
