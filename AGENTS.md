@@ -37,8 +37,8 @@ bun run build            # build (scripts/build.ts + tsc declarations + host nat
 bun run compile:release  # cross-compile 5 release targets → dist/release/
 bun run compile:bench    # size audit of --compile flag variants
 bun run dev              # run CLI from source
-bun run typecheck        # tsc --noEmit
-bun run check            # oxlint + oxfmt --check
+bun run typecheck        # bun check
+bun run lint             # oxlint + oxfmt --check
 bun run fix              # oxlint --fix + oxfmt --write
 bun run vet              # full pipeline: build → typecheck → fix → custom-hooks → test:coverage
 ```

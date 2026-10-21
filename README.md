@@ -243,7 +243,7 @@ bun install
 bun run dev      # Run CLI from source
 bun run build    # Build
 bun test         # Test
-bun run check    # Lint + format check (oxlint + oxfmt)
+bun run lint    # Lint + format check (oxlint + oxfmt)
 bun run vet      # Full pipeline: build + typecheck + lint + test
 ```
 
