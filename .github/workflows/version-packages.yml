@@ -37,7 +37,7 @@ jobs:
         with:
           version: bunx changeset version
           # changeset tag is local-only; push so release.yml (on: push tags v*) fires
-          publish: bunx changeset tag && git push origin --follow-tags
+          publish: bun run release
           title: "Version Packages"
           commit: "chore: version packages"
           createGithubReleases: false
