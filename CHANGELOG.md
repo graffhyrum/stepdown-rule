@@ -1,5 +1,11 @@
 # @stepdown/analyzer
 
+## 0.4.2
+
+### Patch Changes
+
+- Docs: note private-package changeset config and beads sync practice.
+
 ## 0.4.1
 
 ### Patch Changes

@@ -28,6 +28,8 @@ When dispatching subagents for bugfixes or targeted changes, include explicit sc
 
 ## Commands
 
+> Note: `package.json` is `"private": true`; `.changeset/config.json` sets `privatePackages.version/tag: true` so changesets still versions and tags releases.
+
 ```shell
 bun install              # install dependencies
 bun test                 # run all tests
