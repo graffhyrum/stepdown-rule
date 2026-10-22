@@ -100,10 +100,10 @@ export function reconstructStatements(
 	reorderedFunctions: FunctionNode[],
 ): ts.Statement[] {
 	return [
-		...(categorized.imports as ts.Statement[]),
-		...(categorized.other as ts.Statement[]),
-		...(reorderedFunctions.map((f) => f.node) as ts.Statement[]),
-		...(categorized.exports as ts.Statement[]),
+		...categorized.imports,
+		...categorized.other,
+		...reorderedFunctions.map((f) => f.node),
+		...categorized.exports,
 	];
 }
 /**
@@ -111,12 +111,12 @@ export function reconstructStatements(
  * Consolidates visitor patterns from analyzer.ts and fixer.ts.
  */
 export interface FunctionNode {
-	node: ts.Node;
+	node: ts.Statement;
 }
 
 export interface CategorizedNodes {
-	imports: ts.Node[];
+	imports: ts.Statement[];
 	functions: FunctionNode[];
-	exports: ts.Node[];
-	other: ts.Node[];
+	exports: ts.Statement[];
+	other: ts.Statement[];
 }

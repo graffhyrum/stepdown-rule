@@ -103,6 +103,19 @@ const suite = run("suite", () => {
 	},
 ];
 
+test("5x2.7: lone nested function expression converges in one pass", async () => {
+	const code = `const parent = function () {
+  function helper() { return "h"; }
+  console.log("logic");
+  return "done";
+};`;
+	const before = analyzeCode(code);
+	expect(before.nestedFunctionViolations.length).toBeGreaterThan(0);
+	const { after, fixedContent } = fixCode(code);
+	expect(totalViolations(after)).toBe(0);
+	expect(fixedContent.indexOf("console.log")).toBeLessThan(fixedContent.indexOf("function helper"));
+});
+
 for (const { name, load, logicNeedle, helperNeedle } of convergeCases) {
 	test(`5x2.7: ${name} converges in one pass`, async () => {
 		const code = await load();
