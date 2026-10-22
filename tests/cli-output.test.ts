@@ -8,7 +8,7 @@ import {
 } from "../src/cli-output";
 import { ExitConfig, ExitInternal, ExitNoFiles, ExitUsage } from "../src/exit-codes";
 import { createHumanReporter } from "../src/reporter";
-import type { FixResult } from "../src/types";
+import type { FixResult } from "../src";
 import { withCapturedIo } from "./cli-harness";
 
 function fixResult(partial: Partial<FixResult>): FixResult {
