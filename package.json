@@ -41,7 +41,7 @@
 		"typecheck": "bun check -p tsconfig.check.json",
 		"lint": "bunx oxlint . && bunx oxfmt --check .",
 		"fix": "bunx oxlint --fix . && bunx oxfmt --write .",
-		"custom-hooks": "bun run scripts/rule-validator.ts && bun run dist/cli.js fix",
+		"custom-hooks": "rule-validator && bun run dist/cli.js fix",
 		"fastvet": "bun run build && bun typecheck && bun fix && bun run custom-hooks  && bun run test:coverage",
 		"vet": "bun fastvet",
 		"changeset": "changeset",
@@ -58,6 +58,8 @@
 	},
 	"devDependencies": {
 		"@changesets/cli": "^3.0.3",
+		"@graff/rule-validator": "github:graffhyrum/rule-validator#v1.1.0",
+		"@graffhyrum/crap4ts": "github:graffhyrum/crap4ts#v1.1.1",
 		"@types/bun": "^1.4.3",
 		"@types/node": "^26.6.5",
 		"oxfmt": "^0.74.0",
