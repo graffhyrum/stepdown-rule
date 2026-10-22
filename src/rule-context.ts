@@ -18,5 +18,5 @@ export interface RuleContext {
 export interface ViolationRule {
 	id: string;
 	analyze(ctx: RuleContext): Violation[];
-	fix(ctx: RuleContext, violations: Violation[]): string;
+	fix(ctx: RuleContext): string;
 }

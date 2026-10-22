@@ -27,16 +27,16 @@ test("StepdownRule.fix reduces stepdown violations", () => {
 	const { ctx } = parseRuleContext(fixture);
 	const violations = stepdownRule.analyze(ctx);
 	expect(violations.length).toBeGreaterThan(0);
-	const fixed = stepdownRule.fix(ctx, violations);
+	const fixed = stepdownRule.fix(ctx);
 	const after = stepdownRule.analyze(parseRuleContext(fixed).ctx);
 	expect(after.length).toBeLessThan(violations.length);
 });
 
-test("stepdownRule.fix with empty violations returns unchanged content", () => {
-	const fixture = getViolationFixture("stepdown");
+test("stepdownRule.fix with no violations returns unchanged content", () => {
+	const fixture = "function main() { return helper(); }\nfunction helper() { return \"h\"; }";
 	const { ctx } = parseRuleContext(fixture);
-	expect(stepdownRule.analyze(ctx).length).toBeGreaterThan(0);
-	expect(stepdownRule.fix(ctx, [])).toBe(ctx.parsedFile.content);
+	expect(stepdownRule.analyze(ctx).length).toBe(0);
+	expect(stepdownRule.fix(ctx)).toBe(ctx.parsedFile.content);
 });
 
 test("NestedRule.analyze reports nested name and parent", () => {
@@ -52,11 +52,11 @@ test("NestedRule.analyze reports nested name and parent", () => {
 	}
 });
 
-test("nestedRule.fix with empty violations is no-op", () => {
-	const fixture = getViolationFixture("nested");
+test("nestedRule.fix with no violations is no-op", () => {
+	const fixture = "function parent() {\n  console.log(\"logic\");\n  return \"done\";\n  function nestedHelper() { return \"h\"; }\n}";
 	const { ctx } = parseRuleContext(fixture);
-	expect(nestedRule.analyze(ctx).length).toBeGreaterThan(0);
-	expect(nestedRule.fix(ctx, [])).toBe(fixture);
+	expect(nestedRule.analyze(ctx).length).toBe(0);
+	expect(nestedRule.fix(ctx)).toBe(fixture);
 });
 
 test("nestedRule.fix alone reduces nested violations", () => {
@@ -64,7 +64,7 @@ test("nestedRule.fix alone reduces nested violations", () => {
 	const { ctx } = parseRuleContext(fixture);
 	const before = nestedRule.analyze(ctx);
 	expect(before.length).toBeGreaterThan(0);
-	const fixed = nestedRule.fix(ctx, before);
+	const fixed = nestedRule.fix(ctx);
 	const after = nestedRule.analyze(parseRuleContext(fixed).ctx);
 	expect(after.length).toBeLessThan(before.length);
 });

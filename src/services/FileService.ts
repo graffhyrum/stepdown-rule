@@ -2,7 +2,8 @@ import { lstat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { glob } from "glob";
 import { minimatch } from "minimatch";
-import ts from "typescript";
+
+import { parseContent as parseContentCommon, toPosixPath } from "./file-service-common";
 import type { FileServiceOptions, IFileService, ParsedFile } from "./types";
 
 const IGNORED_DIRS = ["node_modules", "dist", "coverage"];
@@ -27,12 +28,11 @@ export class FileService implements IFileService {
 
 	async parseFile(filePath: string): Promise<ParsedFile> {
 		const content = await this.readFile(filePath);
-		return this.parseContent(content, filePath);
+		return parseContentCommon(content, filePath);
 	}
 
 	parseContent(content: string, filePath: string): ParsedFile {
-		const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
-		return { sourceFile, filePath, content };
+		return parseContentCommon(content, filePath);
 	}
 
 	async readFile(filePath: string): Promise<string> {
@@ -72,9 +72,7 @@ function isEnoent(error: unknown): boolean {
 	return error.code === "ENOENT";
 }
 
-function toPosixPath(p: string): string {
-	return p.replaceAll("\\", "/");
-}
+// toPosixPath imported from file-service-common
 
 function buildIgnore(): string[] {
 	return [...IGNORED_DIRS.map((d) => `**/${d}/**`), "**/*.d.ts"];

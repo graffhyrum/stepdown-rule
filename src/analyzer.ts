@@ -2,13 +2,13 @@ import ts from "typescript";
 import { buildCallGraph, callGraphToDependencyMap } from "./ast-graph-builder";
 import { getPosition, isFunctionLike } from "./ast-utils";
 import { detectCircularDependencies as detectCycles } from "./graph-algorithms";
-import { findNestedFunctionViolations } from "./nested-violation-detector";
+
 import { Pipeline } from "./pipeline";
 import type { RuleRegistry } from "./registry";
 import type { CallSiteInfo, RuleContext, Violation } from "./rule-context";
 import { FileService } from "./services/FileService";
 import type { IFileService, ParsedFile } from "./services/types";
-import { findStepdownViolations } from "./stepdown-violation-detector";
+
 import type {
 	AnalysisResult,
 	Config,
@@ -37,22 +37,6 @@ export async function analyzeFiles(
 		resolvedFiles,
 	});
 	return analysisResults;
-}
-export function analyzeParsedFile(parsedFile: ParsedFile): AnalysisResult {
-	const ctx = buildRuleContext(parsedFile);
-	const nestedFunctionViolations = findNestedFunctionViolations(
-		ctx.parsedFile.sourceFile,
-		ctx.functions,
-	);
-	const circularDependencies = detectCircularDependencies(ctx.functions, ctx.callGraph);
-	return {
-		file: ctx.parsedFile.filePath,
-		violations: findStepdownViolations(ctx),
-		nestedFunctionViolations,
-		circularDependencies,
-		totalFunctions: ctx.functions.length,
-		dependencyGraph: ctx.dependencyGraph,
-	};
 }
 export function analyzeWithRules(
 	parsedFile: ParsedFile,

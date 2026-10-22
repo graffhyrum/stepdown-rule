@@ -1,14 +1,8 @@
-import ts from "typescript";
-import { buildDependencyGraph } from "./ast-graph-builder";
-import { categorizeNodes } from "./ast-node-visitors";
-import { countFunctionMovements } from "./function-movement";
-import { transformNestedBlocks } from "./nested-block-transform";
 import { Pipeline, type PipelineResult } from "./pipeline";
 import type { RuleRegistry } from "./registry";
 import { FileService } from "./services/FileService";
 import type { IFileService } from "./services/types";
-import { applyTopLevelReorder } from "./stepdown-top-level-reorder";
-import type { AnalysisResult, Config, FixResult } from "./types";
+import type { Config, FixResult } from "./types";
 
 export type { PipelineResult };
 export { fixFileWithRules } from "./rule-fix";
@@ -24,67 +18,6 @@ export interface FixFilesParams {
 
 /** @deprecated Use {@link FixFilesParams}. */
 export type FixFilesOptions = Pick<FixFilesParams, "dryRun" | "resolvedFiles">;
-
-const defaultPrinter = ts.createPrinter({ newLine: ts.NewLineKind.LineFeed });
-
-/**
- * @deprecated Prefer {@link fixFileWithRules} via Pipeline (rule-based path).
- * Kept for characterization / legacy comparison tests only.
- */
-export function fixParsedFile(params: {
-	content: string;
-	filePath: string;
-	analysisResult?: AnalysisResult;
-}): FixResult {
-	const { content, filePath, analysisResult } = params;
-	if (
-		analysisResult &&
-		analysisResult.violations.length === 0 &&
-		analysisResult.nestedFunctionViolations.length === 0
-	) {
-		return {
-			file: filePath,
-			fixed: false,
-			originalContent: content,
-			fixedContent: content,
-			reordered: 0,
-			errors: [],
-		};
-	}
-	const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
-	const fixedContent = reorderFunctionDeclarations(sourceFile, analysisResult?.dependencyGraph);
-	const hasChanges = defaultPrinter.printFile(sourceFile) !== fixedContent;
-	if (hasChanges) {
-		return {
-			file: filePath,
-			fixed: true,
-			originalContent: content,
-			fixedContent,
-			reordered: countFunctionMovements(content, fixedContent),
-			errors: [],
-		};
-	}
-	return {
-		file: filePath,
-		fixed: false,
-		originalContent: content,
-		fixedContent,
-		reordered: 0,
-		errors: [],
-	};
-}
-
-function reorderFunctionDeclarations(
-	sourceFile: ts.SourceFile,
-	analyzerDependencyGraph?: Map<string, string[]>,
-): string {
-	const dependencies =
-		analyzerDependencyGraph ??
-		buildDependencyGraph(categorizeNodes(sourceFile).functions, sourceFile).dependencies;
-	let newSourceFile = applyTopLevelReorder(sourceFile, dependencies);
-	newSourceFile = transformNestedBlocks(newSourceFile);
-	return defaultPrinter.printFile(newSourceFile);
-}
 
 /** Thin facade over {@link Pipeline.run} (mode: fix); returns fixResults only. */
 export async function fixFiles(params: FixFilesParams): Promise<FixResult[]> {

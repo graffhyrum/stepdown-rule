@@ -2,7 +2,7 @@ import { expect } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { analyzeParsedFile, buildRuleContext } from "../src/analyzer";
+import { analyzeWithRules, buildRuleContext } from "../src/analyzer";
 import { fixFileWithRules } from "../src/fixer";
 import { registerDefaultRules } from "../src/register-default-rules";
 import { createRegistry, getEnabled } from "../src/registry";
@@ -91,7 +91,9 @@ export async function createTestFile(
 export function analyzeCode(code: string): AnalysisResult {
 	const service = new InMemoryFileService();
 	const parsedFile = service.parseContent(code, "test.ts");
-	return analyzeParsedFile(parsedFile);
+	registerDefaultRules();
+	const enabledRules = getEnabled();
+	return analyzeWithRules(parsedFile, enabledRules);
 }
 
 export function totalViolations(result: AnalysisResult | undefined): number {
@@ -119,6 +121,8 @@ export function fixCode(
 		enabledRules,
 		service,
 	});
-	const after = analyzeParsedFile(service.parseContent(result.fixedContent, filePath));
+	registerDefaultRules();
+	const afterRules = getEnabled(config.enabledRuleIds);
+	const after = analyzeWithRules(service.parseContent(result.fixedContent, filePath), afterRules);
 	return { result, after, fixedContent: result.fixedContent };
 }

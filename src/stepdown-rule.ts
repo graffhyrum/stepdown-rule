@@ -7,8 +7,8 @@ export const stepdownRule = {
 	analyze(ctx: RuleContext): Violation[] {
 		return findStepdownViolations(ctx);
 	},
-	fix(ctx: RuleContext, violations: Violation[]): string {
-		if (violations.length === 0) {
+	fix(ctx: RuleContext): string {
+		if (findStepdownViolations(ctx).length === 0) {
 			return ctx.parsedFile.content;
 		}
 		return reorderTopLevelOnly(ctx.parsedFile.sourceFile, ctx.dependencyGraph);

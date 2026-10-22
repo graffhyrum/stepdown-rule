@@ -24,7 +24,7 @@ export function fixFileWithRules(params: {
 		const ctx = buildRuleContext(parsedFile);
 		const violations = rule.analyze(ctx);
 		if (violations.length > 0) {
-			content = rule.fix(ctx, violations);
+			content = rule.fix(ctx);
 		}
 	}
 	const fixed = hasPrintToPrintChange(originalContent, content, filePath);

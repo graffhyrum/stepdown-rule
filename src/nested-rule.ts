@@ -12,8 +12,8 @@ export const nestedRule: ViolationRule = {
 	analyze(ctx: RuleContext): Violation[] {
 		return findNestedViolations(ctx);
 	},
-	fix(ctx: RuleContext, violations: Violation[]): string {
-		if (violations.length === 0) {
+	fix(ctx: RuleContext): string {
+		if (findNestedViolations(ctx).length === 0) {
 			return ctx.parsedFile.content;
 		}
 		return applyNestedOnly(ctx.parsedFile.sourceFile);

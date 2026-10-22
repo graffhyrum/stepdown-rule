@@ -1,10 +1,6 @@
 import { minimatch } from "minimatch";
-import ts from "typescript";
+import { parseContent as parseContentCommon, toPosixPath } from "./file-service-common";
 import type { FileServiceOptions, IFileService, ParsedFile } from "./types";
-
-function toPosixPath(p: string): string {
-	return p.replaceAll("\\", "/");
-}
 
 /**
  * In-memory {@link IFileService} for unit tests — no disk, no temp dirs.
@@ -36,12 +32,11 @@ export class InMemoryFileService implements IFileService {
 
 	async parseFile(filePath: string): Promise<ParsedFile> {
 		const content = await this.readFile(filePath);
-		return this.parseContent(content, filePath);
+		return parseContentCommon(content, filePath);
 	}
 
 	parseContent(content: string, filePath: string): ParsedFile {
-		const sourceFile = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true);
-		return { sourceFile, filePath, content };
+		return parseContentCommon(content, filePath);
 	}
 
 	async readFile(filePath: string): Promise<string> {
