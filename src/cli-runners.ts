@@ -13,6 +13,42 @@ export interface CliOptions {
 	rules?: string;
 }
 
+/**
+ * Shared preflight for fix commands: build config, resolve files.
+ */
+export async function prepareFix(
+	patterns: string[],
+	options: CliOptions,
+): Promise<
+	| { ok: true; config: Config; fileService: FileService; files: string[] }
+	| { ok: false; errors: CliErrorPayload[] }
+> {
+	return prepareAnalyze(patterns, options);
+}
+
+/**
+ * Shared preflight for analyze commands: build config, resolve files.
+ * Concentrates the orchestration that human and agents handlers both need.
+ */
+export async function prepareAnalyze(
+	patterns: string[],
+	options: CliOptions,
+): Promise<
+	| { ok: true; config: Config; fileService: FileService; files: string[] }
+	| { ok: false; errors: CliErrorPayload[] }
+> {
+	const built = await buildConfigFromCliSafe(options);
+	if ("error" in built) {
+		return { ok: false, errors: [built.error] };
+	}
+	const fileService = new FileService({ ignore: built.config.ignore });
+	const resolved = await resolvePatterns(fileService, patterns);
+	if ("error" in resolved) {
+		return { ok: false, errors: [resolved.error] };
+	}
+	return { ok: true, config: built.config, fileService, files: resolved.files };
+}
+
 export async function buildConfigFromCliSafe(options: CliOptions): Promise<
 	| {
 			config: Config;

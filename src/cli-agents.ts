@@ -8,13 +8,7 @@ import {
 	patternsArgument,
 	rulesOption,
 } from "./cli-options";
-import {
-	buildConfigFromCliSafe,
-	resolvePatterns,
-	runAnalyze,
-	runFix,
-	type CliOptions,
-} from "./cli-runners";
+import { prepareAnalyze, runAnalyze, runFix, type CliOptions } from "./cli-runners";
 import {
 	AgentsAnalyzeEnvelopeJsonSchema,
 	AgentsFixEnvelopeJsonSchema,
@@ -23,8 +17,6 @@ import {
 import { ExitUsage } from "./exit-codes";
 import { list as listRules } from "./registry";
 import { createReporter } from "./reporter";
-import { FileService } from "./services/FileService";
-import type { Config } from "./types";
 
 const schemaTargetArgument = new Argument(
 	"<target>",
@@ -32,18 +24,6 @@ const schemaTargetArgument = new Argument(
 );
 
 const agentsReporter = createReporter("agents");
-
-type AgentsPreflight =
-	| {
-			ok: true;
-			config: Config;
-			fileService: FileService;
-			files: string[];
-	  }
-	| {
-			ok: false;
-			errors: CliErrorPayload[];
-	  };
 
 export function registerAgentsCommand(program: Command): void {
 	const agents = new Command("agents");
@@ -110,7 +90,7 @@ async function runAgentsFix(
 		includeContent?: boolean;
 	},
 ): Promise<void> {
-	const preflight = await agentsPreflight(patterns, options);
+	const preflight = await prepareAnalyze(patterns, options);
 	if (!preflight.ok) {
 		process.exitCode = agentsReporter.reportEarlyFailure("fix", preflight.errors, {
 			command: "agents/fix",
@@ -135,7 +115,7 @@ async function runAgentsAnalyze(
 		includeGraph?: boolean;
 	},
 ): Promise<void> {
-	const preflight = await agentsPreflight(patterns, options);
+	const preflight = await prepareAnalyze(patterns, options);
 	if (!preflight.ok) {
 		process.exitCode = agentsReporter.reportEarlyFailure("analyze", preflight.errors, {
 			command: "agents/analyze",
@@ -174,24 +154,6 @@ function internalErrorPayload(error: unknown): CliErrorPayload {
 		message: error instanceof Error ? error.message : String(error),
 		hint: "Report this issue with the command and file patterns used.",
 	};
-}
-
-async function agentsPreflight(patterns: string[], options: CliOptions): Promise<AgentsPreflight> {
-	const errors: CliErrorPayload[] = [];
-	const built = await buildConfigFromCliSafe(options);
-	if ("error" in built) {
-		errors.push(built.error);
-		emitCliError(built.error);
-		return { ok: false, errors };
-	}
-	const fileService = new FileService({ ignore: built.config.ignore });
-	const resolved = await resolvePatterns(fileService, patterns);
-	if ("error" in resolved) {
-		errors.push(resolved.error);
-		emitCliError(resolved.error);
-		return { ok: false, errors };
-	}
-	return { ok: true, config: built.config, fileService, files: resolved.files };
 }
 
 function runAgentsSchema(target: string): void {

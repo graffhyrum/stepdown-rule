@@ -1,10 +1,7 @@
 import { emitCliError } from "./cli-errors";
-import { buildConfigFromCliSafe, runAnalyze, runFix } from "./cli-runners";
+import { prepareAnalyze, prepareFix, runAnalyze, runFix } from "./cli-runners";
 import { ExitInternal, ExitUsage } from "./exit-codes";
 import { createReporter, resolveFormat, type Reporter } from "./reporter";
-import { FileService } from "./services/FileService";
-import type { IFileService } from "./services/types";
-import type { Config } from "./types";
 
 const subcommandNames = ["fix", "analyze", "agents"];
 
@@ -28,19 +25,16 @@ export async function runHumanAnalyze(
 		process.exitCode = ExitUsage;
 		return;
 	}
-	const built = await buildConfigFromCliSafe(options);
-	if ("error" in built) {
-		emitCliError(built.error);
-		process.exitCode = reporter.reportEarlyFailure("analyze", [built.error], {
+	const preflight = await prepareAnalyze(patterns, options);
+	if (!preflight.ok) {
+		for (const error of preflight.errors) emitCliError(error);
+		process.exitCode = reporter.reportEarlyFailure("analyze", preflight.errors, {
 			command: agentsCommand(reporter, "analyze"),
 		});
 		return;
 	}
-	const config = built.config;
-	const fileService = new FileService({ ignore: config.ignore });
-	const resolved = await resolveFilesOrReport(fileService, patterns, reporter);
-	if (!resolved) return;
-	const results = await runAnalyze(patterns, config, fileService, resolved.files);
+	const { config, fileService, files } = preflight;
+	const results = await runAnalyze(patterns, config, fileService, files);
 	const verbose = options.verbose || reporter.format === "json";
 	process.exitCode = reporter.reportAnalyze(results, {
 		verbose,
@@ -69,20 +63,17 @@ export async function runHumanFix(
 		process.exitCode = ExitUsage;
 		return;
 	}
-	const built = await buildConfigFromCliSafe(options);
-	if ("error" in built) {
-		emitCliError(built.error);
-		process.exitCode = reporter.reportEarlyFailure("fix", [built.error], {
+	const preflight = await prepareFix(patterns, options);
+	if (!preflight.ok) {
+		for (const error of preflight.errors) emitCliError(error);
+		process.exitCode = reporter.reportEarlyFailure("fix", preflight.errors, {
 			command: agentsCommand(reporter, "fix"),
 		});
 		return;
 	}
-	const config: Config = built.config;
-	const fileService = new FileService({ ignore: config.ignore });
-	const resolved = await resolveFilesOrReport(fileService, patterns, reporter, "fix");
-	if (!resolved) return;
+	const { config, fileService, files } = preflight;
 	const fixResults = await runFix(patterns, config, fileService, {
-		resolvedFiles: resolved.files,
+		resolvedFiles: files,
 		dryRun: options.dryRun,
 	});
 	process.exitCode = reporter.reportFix(fixResults, {
@@ -113,28 +104,6 @@ export function handleUnexpectedError(
 	if (process.exitCode === undefined) {
 		process.exitCode = ExitInternal;
 	}
-}
-
-async function resolveFilesOrReport(
-	fileService: IFileService,
-	patterns: string[],
-	reporter: Reporter,
-	kind: "analyze" | "fix" = "analyze",
-): Promise<{ files: string[] } | null> {
-	const files = await fileService.resolveFiles(patterns);
-	if (files.length === 0) {
-		const payload = {
-			code: "NO_FILES" as const,
-			message: `No files matched: ${patterns.join(", ")}`,
-			hint: "Quote globs for the shell, e.g. 'src/**/*.ts'.",
-		};
-		emitCliError(payload);
-		process.exitCode = reporter.reportEarlyFailure(kind, [payload], {
-			command: agentsCommand(reporter, kind),
-		});
-		return null;
-	}
-	return { files };
 }
 
 function agentsCommand(reporter: Reporter, kind: "analyze" | "fix"): string {
