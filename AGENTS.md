@@ -47,6 +47,13 @@ bun run vet              # full pipeline: build → typecheck → fix → custom
 
 Native compile output: `dist/stepdown-rule` (Unix) or `dist/stepdown-rule.exe` (Windows), minified (~98 MiB). Package `bin` is `dist/cli.js` (`bun link`). Push tag `v*` → `.github/workflows/release.yml` publishes GitHub Release binaries + `install.sh` / `install.ps1`.
 
+## Releases
+
+- `version-packages.yml` runs on push to main and creates a "Version Packages" PR when a changeset exists.
+- Merging that PR bumps version, creates a tag, and runs `changeset tag && git push --follow-tags`. Tag pushes made by the bot do not trigger `release.yml`.
+- To publish, manually delete and re-push the tag with signing disabled: `git push origin :refs/tags/vX.Y.Z && git -c tag.gpgsign=false push origin vX.Y.Z`.
+- `release.yml` also supports `workflow_dispatch` for manual runs.
+
 ## Architecture
 
 ### Two-rule system
