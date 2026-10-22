@@ -3,6 +3,7 @@ dolt/
 dolt-access.lock
 
 # Runtime files
+*.lock
 .write.lock
 *.tmp
 bd.sock
