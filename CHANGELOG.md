@@ -1,5 +1,11 @@
 # @stepdown/analyzer
 
+## 0.4.3
+
+### Patch Changes
+
+- 179d87b: Declare `rule-validator` and `crap4ts` as dev dependencies instead of relying on locally linked/vendored files; update `custom-hooks` to use the installed `rule-validator` binary.
+
 ## 0.4.2
 
 ### Patch Changes
