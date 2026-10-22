@@ -1,6 +1,6 @@
 {
 	"name": "@stepdown/analyzer",
-	"version": "0.4.4",
+	"version": "0.4.5",
 	"private": true,
 	"description": "TypeScript AST analyzer that enforces the stepdown rule for function organization",
 	"keywords": [

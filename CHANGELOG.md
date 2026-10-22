@@ -1,5 +1,11 @@
 # @stepdown/analyzer
 
+## 0.4.5
+
+### Patch Changes
+
+- dea3b6a: Refactor AST visitor typing: CategorizedNodes now holds ts.Statement arrays, removing casts in reconstructStatements; add coverage for function-expression nested reorder.
+
 ## 0.4.4
 
 ### Patch Changes
