@@ -7,7 +7,7 @@ import {
 	toAgentsFixResults,
 } from "../src/cli-output";
 import { ExitConfig, ExitInternal, ExitNoFiles, ExitUsage } from "../src/exit-codes";
-import { createHumanReporter } from "../src/reporter-human";
+import { createHumanReporter } from "../src/reporter";
 import type { FixResult } from "../src/types";
 import { withCapturedIo } from "./cli-harness";
 
