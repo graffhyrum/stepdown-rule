@@ -105,7 +105,8 @@ export function buildBlockOrderModel(block: ts.Block, sourceFile: ts.SourceFile)
 			nestedDeps.push({ from: stmt.name, to });
 		}
 	}
-	const referencedNested = collectReferencedNested(stmts, nestedNames, sourceFile);
+	const direct = collectReferencedNested(stmts, nestedNames, sourceFile);
+	const referencedNested = pinUninitializedReached(direct, stmts, nestedDeps);
 	return { stmts, nestedDeps, referencedNested };
 }
 function collectReferencedNested(
@@ -121,6 +122,34 @@ function collectReferencedNested(
 		collectIdents(stmt.node, sourceFile, known, referenced);
 	}
 	return referenced;
+}
+/**
+ * A const/let helper is not hoisted: it must stay above any logic that can reach it,
+ * even through another nested helper. Function declarations reached only transitively
+ * stay movable because hoisting makes them safe.
+ */
+function pinUninitializedReached(
+	direct: Set<string>,
+	stmts: BlockStmt[],
+	nestedDeps: NestedFuncEdge[],
+): Set<string> {
+	const hoisted = new Set(
+		stmts
+			.filter((s) => s.kind === "nestedFunc" && ts.isFunctionDeclaration(s.node))
+			.map((s) => s.name),
+	);
+	const pinned = new Set(direct);
+	const reached = new Set(direct);
+	const queue = [...direct];
+	for (let name = queue.pop(); name !== undefined; name = queue.pop()) {
+		for (const { from, to } of nestedDeps) {
+			if (from !== name || reached.has(to)) continue;
+			reached.add(to);
+			queue.push(to);
+			if (!hoisted.has(to)) pinned.add(to);
+		}
+	}
+	return pinned;
 }
 function collectIdents(
 	node: ts.Node,
