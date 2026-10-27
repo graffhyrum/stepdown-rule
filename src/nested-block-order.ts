@@ -21,8 +21,9 @@ export interface NestedFuncEdge {
  * nestedFuncs topo-sorted (caller before callee) — including a single movable nested.
  *
  * `referencedNested` holds the helpers that must stay in place: those logic references
- * directly, plus non-hoisted (const/let) helpers that a pinned helper reads in any way
- * (call, alias, argument, object or array literal member).
+ * directly (including function declarations), plus non-hoisted (const/let) helpers
+ * reachable from logic through any chain of helper reads (call, alias, argument,
+ * object or array literal member).
  */
 export interface BlockOrderModel {
 	stmts: BlockStmt[];
@@ -130,10 +131,9 @@ function collectReferencedNested(
 	return referenced;
 }
 /**
- * A const/let helper is not hoisted: it must stay above any logic that reads it, or that
- * reads an already-pinned helper which reads it, in any way (not only by calling it).
- * Function declarations reached only transitively stay movable because hoisting makes
- * them safe.
+ * A const/let helper is not hoisted: it must stay above logic if it is reachable from
+ * logic through any chain of helper reads (not only calls). The chain may pass through
+ * hoisted function declarations, which themselves stay movable.
  */
 function pinUninitializedReached(
 	direct: Set<string>,
