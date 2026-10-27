@@ -153,6 +153,96 @@ test("unreferenced const arrow helper before logic is still flagged and moved", 
 	);
 });
 
+const viaAlias = `export function outer() {
+	const helper = () => 1;
+	const caller = () => {
+		const fn = helper;
+		return fn();
+	};
+	return caller();
+}
+`;
+
+const viaArgument = `export function outer() {
+	const helper = (n: number) => n + 1;
+	const caller = () => [1].map(helper)[0];
+	return caller();
+}
+`;
+
+const viaObjectLiteral = `export function outer() {
+	const helper = () => 1;
+	const caller = () => {
+		const bag = { helper };
+		return bag.helper();
+	};
+	return caller();
+}
+`;
+
+const viaArrayLiteral = `export function outer() {
+	const helper = () => 1;
+	const caller = () => {
+		const list = [helper];
+		return list[0]();
+	};
+	return caller();
+}
+`;
+
+const declarationViaAlias = `export function outer() {
+	function helper() {
+		return 1;
+	}
+	const caller = () => {
+		const fn = helper;
+		return fn();
+	};
+	return caller();
+}
+`;
+
+test.each([
+	["alias assignment", viaAlias, 1],
+	["argument passing", viaArgument, 2],
+	["object literal", viaObjectLiteral, 1],
+	["array literal", viaArrayLiteral, 1],
+])("const helper reached by %s is pinned and the fixed code runs", async (_label, code, expected) => {
+	expect(analyzeCode(code).nestedFunctionViolations.map((v) => v.nested.name)).not.toContain(
+		"helper",
+	);
+	const { fixedContent } = fixCode(code, defaultConfig);
+	expect(positionOf(fixedContent, "const helper")).toBeLessThan(
+		positionOf(fixedContent, "return caller()"),
+	);
+	expect(await runOuter(fixedContent)).toBe(expected);
+});
+
+test("function declaration reached only by alias stays movable and the fixed code runs", async () => {
+	const flagged = analyzeCode(declarationViaAlias).nestedFunctionViolations.map(
+		(v) => v.nested.name,
+	);
+	expect(flagged).toContain("helper");
+	const { fixedContent } = fixCode(declarationViaAlias, defaultConfig);
+	expect(positionOf(fixedContent, "function helper")).toBeGreaterThan(
+		positionOf(fixedContent, "return caller()"),
+	);
+	expect(await runOuter(fixedContent)).toBe(1);
+});
+
+// Imports the fixed output so a TDZ ReferenceError fails the test.
+async function runOuter(content: string): Promise<number> {
+	const dir = mkdtempSync(join(tmpdir(), "const-tdz-"));
+	try {
+		const file = join(dir, "fixed.ts");
+		writeFileSync(file, content);
+		const mod = await import(file);
+		return mod.outer();
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+}
+
 // Fails on a missing match so a -1 index can never satisfy an ordering assertion.
 function positionOf(content: string, pattern: string | RegExp): number {
 	const at = typeof pattern === "string" ? content.indexOf(pattern) : content.search(pattern);

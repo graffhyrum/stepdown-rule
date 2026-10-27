@@ -1,5 +1,4 @@
 import ts from "typescript";
-import { extractDependenciesFor } from "./ast-graph-builder";
 import { getPosition, isFunctionLike } from "./ast-utils";
 import { topologicalSort } from "./graph-algorithms";
 export type BlockStmtKind = "logic" | "nestedFunc" | "other";
@@ -102,11 +101,14 @@ export function buildBlockOrderModel(block: ts.Block, sourceFile: ts.SourceFile)
 		}
 	}
 	const nestedDeps: NestedFuncEdge[] = [];
+	// Every identifier counts, not only calls: an alias, argument or literal member also reads a helper.
+	const known = new Set(nestedNames.keys());
 	for (const stmt of stmts) {
 		if (stmt.kind !== "nestedFunc" || !stmt.name) continue;
-		for (const to of extractDependenciesFor(stmt.node, sourceFile, nestedNames)) {
-			nestedDeps.push({ from: stmt.name, to });
-		}
+		const reads = new Set<string>();
+		collectIdents(stmt.node, sourceFile, known, reads);
+		reads.delete(stmt.name);
+		for (const to of reads) nestedDeps.push({ from: stmt.name, to });
 	}
 	const direct = collectReferencedNested(stmts, nestedNames, sourceFile);
 	const referencedNested = pinUninitializedReached(direct, stmts, nestedDeps);
