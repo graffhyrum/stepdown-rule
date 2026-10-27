@@ -33,14 +33,16 @@ async function copyConfigSources(): Promise<void> {
 }
 
 async function writeJsonSchemas(): Promise<void> {
+	const [config, analyze, fix] = await Promise.all([
+		formatJsonSchema(FileConfigJsonSchema),
+		formatJsonSchema(AgentsAnalyzeEnvelopeJsonSchema),
+		formatJsonSchema(AgentsFixEnvelopeJsonSchema),
+	]);
 	await Promise.all([
-		Bun.write("./dist/stepdown-schema.json", formatJsonSchema(FileConfigJsonSchema)),
-		Bun.write("./stepdown-schema.json", formatJsonSchema(FileConfigJsonSchema)),
-		Bun.write(
-			"./dist/agents-analyze-schema.json",
-			formatJsonSchema(AgentsAnalyzeEnvelopeJsonSchema),
-		),
-		Bun.write("./dist/agents-fix-schema.json", formatJsonSchema(AgentsFixEnvelopeJsonSchema)),
+		Bun.write("./dist/stepdown-schema.json", config),
+		Bun.write("./stepdown-schema.json", config),
+		Bun.write("./dist/agents-analyze-schema.json", analyze),
+		Bun.write("./dist/agents-fix-schema.json", fix),
 	]);
 }
 
