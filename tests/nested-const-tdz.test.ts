@@ -46,6 +46,60 @@ const unreferencedConst = `export function run() {
 }
 `;
 
+const viaLetArrow = `export function run() {
+	let c = () => 1;
+	const x = () => c();
+	return x();
+}
+`;
+
+const viaFunctionExpression = `export function run() {
+	const f = function () {
+		return 1;
+	};
+	const x = () => f();
+	return x();
+}
+`;
+
+const constCycle = `export function run() {
+	const a = (): number => b();
+	const b = (): number => a();
+	return a;
+}
+`;
+
+const mixedChain = `export function run() {
+	const c = () => 1;
+	function mid() {
+		return c();
+	}
+	const x = () => mid();
+	return x();
+}
+`;
+
+const multiDeclarator = `export function run() {
+	const a = () => 1, b = () => 2;
+	return b();
+}
+`;
+
+test.each([
+	["let arrow reached via another helper", viaLetArrow, "c", "return x()"],
+	["function expression reached via another helper", viaFunctionExpression, "f", "return x()"],
+	["const cycle reached from logic", constCycle, "a", "return a"],
+	["const behind a hoisted function in a mixed chain", mixedChain, "c", "return x()"],
+	["multi-declarator statement used by logic", multiDeclarator, "a", "return b()"],
+])("%s stays pinned before the return", (_label, code, name, ret) => {
+	const flagged = analyzeCode(code).nestedFunctionViolations.map((v) => v.nested.name);
+	expect(flagged).not.toContain(name);
+	const { fixedContent } = fixCode(code, defaultConfig);
+	expect(fixedContent.search(new RegExp(`(const|let) ${name}\b`))).toBeLessThan(
+		fixedContent.indexOf(ret),
+	);
+});
+
 test("const helper reached only through another nested helper is not flagged", () => {
 	expect(analyzeCode(authRepro).nestedFunctionViolations).toHaveLength(0);
 });
@@ -59,6 +113,7 @@ test("fix keeps const helpers before return and the fixed code still runs", asyn
 	try {
 		const file = join(dir, "auth.ts");
 		writeFileSync(file, fixedContent);
+		// Imports the fixed output to prove it runs without a TDZ error.
 		const mod = await import(file);
 		expect(mod.createAuth(["k"]).apiKeyAuth({ header: "Bearer k" })).toBe(true);
 	} finally {

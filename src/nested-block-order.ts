@@ -20,6 +20,9 @@ export interface NestedFuncEdge {
  * Detect: nestedFunc before last logic line, name ∉ referencedNested → violation.
  * Fix: pinned (logic|other|referenced nested) in source order, then movable
  * nestedFuncs topo-sorted (caller before callee) — including a single movable nested.
+ *
+ * `referencedNested` holds the helpers that must stay in place: those referenced by
+ * logic directly, plus non-hoisted (const/let) helpers reached through other nested helpers.
  */
 export interface BlockOrderModel {
 	stmts: BlockStmt[];
@@ -186,6 +189,8 @@ function nestedFuncName(stmt: ts.Statement, sourceFile: ts.SourceFile): string |
 	}
 	if (ts.isVariableStatement(stmt)) {
 		const decls = stmt.declarationList.declarations;
+		// Only the first name would register, so a later declarator could be moved below its use.
+		if (decls.length > 1) return null;
 		const allFunctionLike = decls.every((d) => d.initializer && isFunctionLike(d.initializer));
 		if (!allFunctionLike) return null;
 		const [decl] = decls;
