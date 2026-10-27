@@ -95,9 +95,14 @@ test.each([
 	const flagged = analyzeCode(code).nestedFunctionViolations.map((v) => v.nested.name);
 	expect(flagged).not.toContain(name);
 	const { fixedContent } = fixCode(code, defaultConfig);
-	expect(fixedContent.search(new RegExp(`(const|let) ${name}\b`))).toBeLessThan(
-		fixedContent.indexOf(ret),
-	);
+	const declAt = positionOf(fixedContent, new RegExp(`(?:const|let) ${name}\\b`));
+	expect(declAt).toBeLessThan(positionOf(fixedContent, ret));
+});
+
+test("multi-declarator statement is not moved by the fix", () => {
+	const { fixedContent } = fixCode(multiDeclarator, defaultConfig);
+	const stmtAt = positionOf(fixedContent, "const a = () => 1, b = () => 2;");
+	expect(stmtAt).toBeLessThan(positionOf(fixedContent, "return b()"));
 });
 
 test("const helper reached only through another nested helper is not flagged", () => {
@@ -106,9 +111,9 @@ test("const helper reached only through another nested helper is not flagged", (
 
 test("fix keeps const helpers before return and the fixed code still runs", async () => {
 	const { fixedContent } = fixCode(authRepro, defaultConfig);
-	const returnAt = fixedContent.indexOf("return { apiKeyAuth }");
-	expect(fixedContent.indexOf("const extractApiKey")).toBeLessThan(returnAt);
-	expect(fixedContent.indexOf("const validateApiKey")).toBeLessThan(returnAt);
+	const returnAt = positionOf(fixedContent, "return { apiKeyAuth }");
+	expect(positionOf(fixedContent, "const extractApiKey")).toBeLessThan(returnAt);
+	expect(positionOf(fixedContent, "const validateApiKey")).toBeLessThan(returnAt);
 	const dir = mkdtempSync(join(tmpdir(), "const-tdz-"));
 	try {
 		const file = join(dir, "auth.ts");
@@ -124,7 +129,7 @@ test("fix keeps const helpers before return and the fixed code still runs", asyn
 test("const helper reached through a hoisted function declaration stays pinned", () => {
 	expect(analyzeCode(viaHoistedDeclaration).nestedFunctionViolations).toHaveLength(0);
 	const { fixedContent } = fixCode(viaHoistedDeclaration, defaultConfig);
-	expect(fixedContent.indexOf("const b")).toBeLessThan(fixedContent.indexOf("return a()"));
+	expect(positionOf(fixedContent, "const b")).toBeLessThan(positionOf(fixedContent, "return a()"));
 });
 
 test("function declaration reached only transitively may still move below logic", () => {
@@ -133,7 +138,9 @@ test("function declaration reached only transitively may still move below logic"
 	);
 	expect(flagged).toContain("low");
 	const { fixedContent } = fixCode(viaNestedFunctionOnly, defaultConfig);
-	expect(fixedContent.indexOf("function low")).toBeGreaterThan(fixedContent.indexOf("return value"));
+	expect(positionOf(fixedContent, "function low")).toBeGreaterThan(
+		positionOf(fixedContent, "return value"),
+	);
 });
 
 test("unreferenced const arrow helper before logic is still flagged and moved", () => {
@@ -141,5 +148,14 @@ test("unreferenced const arrow helper before logic is still flagged and moved", 
 		"unused",
 	]);
 	const { fixedContent } = fixCode(unreferencedConst, defaultConfig);
-	expect(fixedContent.indexOf("const unused")).toBeGreaterThan(fixedContent.indexOf("return 2"));
+	expect(positionOf(fixedContent, "const unused")).toBeGreaterThan(
+		positionOf(fixedContent, "return 2"),
+	);
 });
+
+// Fails on a missing match so a -1 index can never satisfy an ordering assertion.
+function positionOf(content: string, pattern: string | RegExp): number {
+	const at = typeof pattern === "string" ? content.indexOf(pattern) : content.search(pattern);
+	expect(at).toBeGreaterThanOrEqual(0);
+	return at;
+}
