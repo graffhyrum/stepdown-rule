@@ -1,5 +1,4 @@
 import ts from "typescript";
-import { extractDependenciesFor } from "./ast-graph-builder";
 import { getPosition, isFunctionLike } from "./ast-utils";
 import { topologicalSort } from "./graph-algorithms";
 export type BlockStmtKind = "logic" | "nestedFunc" | "other";
@@ -18,8 +17,13 @@ export interface NestedFuncEdge {
  * Shared block-order model for nested detect and fix.
  *
  * Detect: nestedFunc before last logic line, name ∉ referencedNested → violation.
- * Fix: pinned (logic|other|referenced nested) in source order, then movable
+ * Fix: pinned (logic|other|referenced nested or reached const/let helper) in source order, then movable
  * nestedFuncs topo-sorted (caller before callee) — including a single movable nested.
+ *
+ * `referencedNested` holds the helpers that must stay in place: those logic references
+ * directly (including function declarations), plus non-hoisted (const/let) helpers
+ * reachable from logic through any chain of helper reads (call, alias, argument,
+ * object or array literal member).
  */
 export interface BlockOrderModel {
 	stmts: BlockStmt[];
@@ -99,13 +103,17 @@ export function buildBlockOrderModel(block: ts.Block, sourceFile: ts.SourceFile)
 		}
 	}
 	const nestedDeps: NestedFuncEdge[] = [];
+	// Every identifier counts, not only calls: an alias, argument or literal member also reads a helper.
+	const known = new Set(nestedNames.keys());
 	for (const stmt of stmts) {
 		if (stmt.kind !== "nestedFunc" || !stmt.name) continue;
-		for (const to of extractDependenciesFor(stmt.node, sourceFile, nestedNames)) {
-			nestedDeps.push({ from: stmt.name, to });
-		}
+		const reads = new Set<string>();
+		collectIdents(stmt.node, sourceFile, known, reads);
+		reads.delete(stmt.name);
+		for (const to of reads) nestedDeps.push({ from: stmt.name, to });
 	}
-	const referencedNested = collectReferencedNested(stmts, nestedNames, sourceFile);
+	const direct = collectReferencedNested(stmts, nestedNames, sourceFile);
+	const referencedNested = pinUninitializedReached(direct, stmts, nestedDeps);
 	return { stmts, nestedDeps, referencedNested };
 }
 function collectReferencedNested(
@@ -121,6 +129,34 @@ function collectReferencedNested(
 		collectIdents(stmt.node, sourceFile, known, referenced);
 	}
 	return referenced;
+}
+/**
+ * A const/let helper is not hoisted: it must stay above logic if it is reachable from
+ * logic through any chain of helper reads (not only calls). The chain may pass through
+ * hoisted function declarations, which themselves stay movable.
+ */
+function pinUninitializedReached(
+	direct: Set<string>,
+	stmts: BlockStmt[],
+	nestedDeps: NestedFuncEdge[],
+): Set<string> {
+	const hoisted = new Set(
+		stmts
+			.filter((s) => s.kind === "nestedFunc" && ts.isFunctionDeclaration(s.node))
+			.map((s) => s.name),
+	);
+	const pinned = new Set(direct);
+	const reached = new Set(direct);
+	const queue = [...direct];
+	for (let name = queue.pop(); name !== undefined; name = queue.pop()) {
+		for (const { from, to } of nestedDeps) {
+			if (from !== name || reached.has(to)) continue;
+			reached.add(to);
+			queue.push(to);
+			if (!hoisted.has(to)) pinned.add(to);
+		}
+	}
+	return pinned;
 }
 function collectIdents(
 	node: ts.Node,
@@ -157,6 +193,8 @@ function nestedFuncName(stmt: ts.Statement, sourceFile: ts.SourceFile): string |
 	}
 	if (ts.isVariableStatement(stmt)) {
 		const decls = stmt.declarationList.declarations;
+		// Only the first name would register, so a later declarator could be moved below its use.
+		if (decls.length > 1) return null;
 		const allFunctionLike = decls.every((d) => d.initializer && isFunctionLike(d.initializer));
 		if (!allFunctionLike) return null;
 		const [decl] = decls;
