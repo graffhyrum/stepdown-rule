@@ -4,6 +4,7 @@ import {
 	AgentsFixEnvelopeJsonSchema,
 	FileConfigJsonSchema,
 } from "../src/config/schema";
+import { formatJsonSchema } from "./format-json-schema";
 import { compileNativeCli, isReleaseCompileTarget, releaseOutfile } from "./compile-native";
 
 export async function emitSchemasAndBundles(): Promise<void> {
@@ -32,17 +33,16 @@ async function copyConfigSources(): Promise<void> {
 }
 
 async function writeJsonSchemas(): Promise<void> {
+	const [config, analyze, fix] = await Promise.all([
+		formatJsonSchema(FileConfigJsonSchema),
+		formatJsonSchema(AgentsAnalyzeEnvelopeJsonSchema),
+		formatJsonSchema(AgentsFixEnvelopeJsonSchema),
+	]);
 	await Promise.all([
-		Bun.write("./dist/stepdown-schema.json", JSON.stringify(FileConfigJsonSchema, null, 2)),
-		Bun.write("./stepdown-schema.json", JSON.stringify(FileConfigJsonSchema, null, 2)),
-		Bun.write(
-			"./dist/agents-analyze-schema.json",
-			JSON.stringify(AgentsAnalyzeEnvelopeJsonSchema, null, 2),
-		),
-		Bun.write(
-			"./dist/agents-fix-schema.json",
-			JSON.stringify(AgentsFixEnvelopeJsonSchema, null, 2),
-		),
+		Bun.write("./dist/stepdown-schema.json", config),
+		Bun.write("./stepdown-schema.json", config),
+		Bun.write("./dist/agents-analyze-schema.json", analyze),
+		Bun.write("./dist/agents-fix-schema.json", fix),
 	]);
 }
 
