@@ -102,17 +102,9 @@ function forEachCallExpression(
 	};
 	visit(root);
 }
-/**
- * Extract all function names from a list of function info objects.
- * Used by both fixer and analyzer to get a set of defined functions.
- */
 export function extractFunctionNames(functions: FunctionInfo[]): Set<string> {
 	return new Set(functions.map((f) => f.name));
 }
-/**
- * Extract function name from a TypeScript node.
- * Handles FunctionDeclarations and VariableStatements with function initializers.
- */
 export function extractFunctionName(node: ts.Node, sourceFile: ts.SourceFile): string | null {
 	if (ts.isFunctionDeclaration(node) && node.name) {
 		return node.name.getText(sourceFile);
