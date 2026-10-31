@@ -44,7 +44,7 @@ function visitForNestedViolations(node: ts.Node, context: NestedViolationContext
 	ts.forEachChild(node, (child) => visitForNestedViolations(child, context));
 }
 
-/** Arrow/function-expression containers (describe/test callbacks) — not VariableDeclaration inits. */
+/** Arrow/function-expression containers (describe/test callbacks), not VariableDeclaration inits. */
 function isAnonymousFunctionScope(node: ts.Node): boolean {
 	if (!isFunctionLike(node)) return false;
 	if (node.parent && ts.isVariableDeclaration(node.parent)) return false;

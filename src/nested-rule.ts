@@ -4,7 +4,7 @@ import type { RuleContext, Violation, ViolationRule } from "./rule-context";
 
 /**
  * Nested function-before-logic ViolationRule.
- * Detect → nested-violation-detector; transform → nested-block-transform (shared BlockOrderModel).
+ * Detect via nested-violation-detector; transform via nested-block-transform (shared BlockOrderModel).
  * Contract: fix(ctx, []) returns parsed content unchanged (no-op).
  */
 export const nestedRule: ViolationRule = {

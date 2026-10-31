@@ -24,7 +24,7 @@ function visitForNestedBlocks(node: ts.Node, sourceFile: ts.SourceFile): ts.Node
 		);
 	}
 	// ExpressionStatement / VariableStatement are container wrappers to reach nested
-	// CallExpression callback blocks — not part of BlockOrderModel itself.
+	// CallExpression callback blocks, not part of BlockOrderModel itself.
 	if (ts.isExpressionStatement(node)) {
 		const inner = visitForNestedBlocks(node.expression, sourceFile);
 		if (inner !== node.expression) {
