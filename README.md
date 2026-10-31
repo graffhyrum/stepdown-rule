@@ -1,26 +1,25 @@
 # Stepdown Rule Analyzer
 
-A TypeScript AST analyzer that enforces the stepdown rule for function organization in codebases. The stepdown rule organizes code from high-level concepts at the top to low-level implementation details at the bottom.
+A TypeScript AST analyzer and fixer that enforces the stepdown rule: callers appear above callees, so high-level logic sits at the top of a file and low-level details at the bottom. It also catches nested function declarations that appear before logic inside a function body.
+
+Built for TypeScript developers and teams who want consistent, top-down function organization without manual reordering. Ships as a CLI and a programmatic API. Runs on standalone binaries (~98 MiB, Bun runtime embedded) — no runtime install required.
+
+## Why use it
+
+- **Readable, top-down files**: entry points and high-level logic first; helpers and details last. Reading flows from concept to implementation.
+- **Safe auto-fix**: `stepdown-rule fix` reorders functions via topological sort and rewrites only files that have violations.
+- **Two rules, one tool**: the `stepdown` rule (module scope) and the `nested` rule (function body). Run either or both, independently.
+- **Agent- and CI-friendly**: a stable JSON envelope (`stepdown-rule agents ...`) with documented exit codes and schemas.
 
 ## Installation
 
-### Trust model
-
-- **Binaries** publish only on tagged GitHub Releases (`v*`) with `SHA256SUMS`.
-- **Installers** (`install.sh` / `install.ps1`) download the Release asset and verify SHA256 **before** copying/executing the binary. Mismatch → abort.
-- **Preferred path**: download the installer from a Release asset, inspect it, then run locally. That separates “fetch script” from “run script”.
-- **Pipe-to-shell** (`curl|bash`, `irm|iex`) executes remote content in one step — higher supply-chain risk. Use only if you accept trusting the URL host at fetch time.
-- No GPG/cosign signatures yet; integrity is checksum-based against GitHub Release assets.
-
-Channels (Release vs Pages): [docs/install-channels.md](docs/install-channels.md).
-
 ### From GitHub Releases (recommended)
 
-Standalone binaries (~98 MiB, Bun runtime embedded — no Bun install required at runtime). Tagged releases publish linux/darwin (x64 + arm64) and windows-x64, plus installers and `SHA256SUMS`.
+Standalone binaries for linux/darwin (x64 + arm64) and windows-x64, plus installers and `SHA256SUMS`. No Bun install required at runtime.
 
-#### Preferred (download → inspect → run)
+**Preferred (download → inspect → run):**
 
-**Unix (macOS / Linux):**
+Unix (macOS / Linux):
 
 ```shell
 curl -fsSL -o install.sh https://github.com/graffhyrum/stepdown-rule/releases/latest/download/install.sh
@@ -28,7 +27,7 @@ less install.sh   # review, then:
 bash install.sh
 ```
 
-**Windows (PowerShell):**
+Windows (PowerShell):
 
 ```powershell
 Invoke-WebRequest -Uri https://github.com/graffhyrum/stepdown-rule/releases/latest/download/install.ps1 -OutFile install.ps1
@@ -38,23 +37,15 @@ powershell -File .\install.ps1
 
 Pin a version: `VERSION=v0.2.0 bash install.sh` or `$env:VERSION = 'v0.2.0'; powershell -File .\install.ps1`.
 
-#### Convenience pipe-to-shell (higher risk)
-
-> Warning: pipes remote script straight into a shell. Prefer the download → inspect → run flow above.
-
-**Unix** (Pages short URL, same script as the tagged Release):
+**Convenience pipe-to-shell (higher risk):**
 
 ```shell
 curl -fsSL https://graffhyrum.github.io/stepdown-rule/install | bash
 ```
 
-**Windows:**
-
 ```powershell
 irm https://graffhyrum.github.io/stepdown-rule/install.ps1 | iex
 ```
-
-Pages deploys only on `v*` tags (not `main` HEAD), so short URLs stay aligned with Release-attached installers. Repo Settings → Pages → Source: **GitHub Actions** (once).
 
 Then:
 
@@ -63,6 +54,8 @@ stepdown-rule --version
 stepdown-rule "src/**/*.ts"
 ```
 
+Trust model, channels, and integrity details: [docs/install-channels.md](docs/install-channels.md).
+
 ### From source (development)
 
 ```shell
@@ -70,18 +63,13 @@ git clone https://github.com/graffhyrum/stepdown-rule.git
 cd stepdown-rule
 bun install
 bun run build
-```
-
-`bun link` registers the JS CLI (`dist/cli.js`) via Bun’s global bin dir:
-
-```shell
 bun link
 stepdown-rule --version
 ```
 
-Host-native binary after build (~98 MiB with `--minify`): `dist/stepdown-rule` (Unix) or `dist/stepdown-rule.exe` (Windows). Cross-compile all release targets: `bun run compile:release` → `dist/release/`.
+Host-native binary after build: `dist/stepdown-rule` (Unix) or `dist/stepdown-rule.exe` (Windows). Cross-compile all release targets: `bun run compile:release` → `dist/release/`.
 
-### Programmatic API (linked package)
+### Programmatic API
 
 ```shell
 cd path/to/your-project
@@ -100,14 +88,21 @@ const fixes = await fixFiles({ patterns: ["src/**/*.ts"], config, fileService })
 console.log(results, fixes);
 ```
 
-## Usage
+## Quickstart
 
-### CLI
+Analyze the default glob and fix what it finds:
 
 ```shell
-# Analyze default (src/**/*.ts)
-stepdown-rule
+stepdown-rule                       # analyze src/**/*.ts
+stepdown-rule fix                  # reorder functions in place
+stepdown-rule analyze --verbose    # also show circular dependencies
+```
 
+Verified to run from a clean checkout (`bun run dev` / `bun run dev fixtures/test-violations.ts`).
+
+## Common commands
+
+```shell
 # Analyze specific files/globs
 stepdown-rule analyze "src/**/*.ts" "lib/**/*.ts"
 
@@ -115,25 +110,21 @@ stepdown-rule analyze "src/**/*.ts" "lib/**/*.ts"
 stepdown-rule analyze src/
 
 # Auto-fix violations
-stepdown-rule fix
-
-# Fix specific files
 stepdown-rule fix "src/**/*.ts"
-
-# Show circular dependencies (verbose mode)
-stepdown-rule analyze --verbose
 
 # JSON output for CI
 stepdown-rule analyze --json
 
-# Only run specific rules
+# Run only specific rules
 stepdown-rule analyze --rules stepdown,nested
 
 # Custom ignore patterns
 stepdown-rule analyze --ignore "test/**/*" "generated/**/*"
 ```
 
-### Agents and automation
+Full option reference: `stepdown-rule --help` and `stepdown-rule help <command>`.
+
+## Agents and automation
 
 For coding agents and CI parsers, use the `agents` subcommand (stable JSON envelope on stdout). See [SKILL.md](SKILL.md) for workflows, exit codes, and decision trees.
 
@@ -143,26 +134,12 @@ stepdown-rule agents fix 'src/**/*.ts' --dry-run
 stepdown-rule agents schema rules
 ```
 
-### Programmatic
+## What is the stepdown rule?
+
+Functions in a file are ordered from high-level to low-level: if function A calls function B, A appears before B. Logic comes before nested function declarations inside a function body.
 
 ```typescript
-import { analyzeFiles, fixFiles } from "@stepdown/analyzer";
-import { FileService } from "@stepdown/analyzer/services/FileService";
-
-const fileService = new FileService();
-const config = { ignore: [], json: false };
-const results = await analyzeFiles(["src/**/*.ts"], config, fileService);
-const fixes = await fixFiles({ patterns: ["src/**/*.ts"], config, fileService });
-
-console.log(results, fixes);
-```
-
-## What is the Stepdown Rule?
-
-The stepdown rule organizes functions in a file from high-level to low-level:
-
-```typescript
-// ✅ Good: Stepdown rule followed
+// ✅ Good: stepdown rule followed
 function main() {
   const user = createUser("John", "john@example.com", "password123");
   console.log("User created:", user);
@@ -183,36 +160,17 @@ function hashPassword(password: string): string {
 }
 ```
 
-The rule: within a scope, scope logic comes before subfunction declarations, and if function A calls function B, then A should appear before B in the file.
+## How it works
 
-## How It Works
+The analyzer reports **only actionable violations** — violations fixable by reordering code. Only the edges that form a circular dependency cycle are excluded, because reordering cannot break a cycle; those need refactoring. Unrelated violations in the same file may still be reported and auto-fixed.
 
-The analyzer reports **only actionable violations** - violations that can be fixed by reordering code. Violations involving functions in circular dependency cycles are excluded from reporting because reordering cannot fix them; they require refactoring.
-
-### What Gets Reported
-
-✅ **Reported**: Functions that call other functions appearing below them
-- These can be fixed by moving the caller after the callee
-
-❌ **Not Reported**: Functions involved in circular dependencies
-- Example: `funcA → funcB → funcA` (mutual recursion)
-- These require architectural changes, not reordering
-- Often appear in tree traversal algorithms, mutual recursion patterns, or interconnected systems
-
-### Circular Dependencies
-
-Circular dependencies are always detected and reported separately. To understand what's creating cycles in your code:
-
-```shell
-stepdown-rule src/analyzer.ts
-# Output shows both violations (fixable) and circular dependencies (architectural)
-```
-
-Circular dependencies do NOT prevent the fixer from running, but files with circular dependencies cannot be auto-fixed since reordering won't resolve them.
+- **Reported**: functions (callers) whose callees appear above them. Fixable by moving the caller before the callee.
+- **Not reported**: the edges that participate in a circular dependency (e.g. `funcA → funcB → funcA`). These need architectural changes.
+- Circular dependencies are always detected and reported separately (`--verbose` or `--json`). Only the cycle edges are left untouched; other violations in the same file can still be auto-fixed.
 
 ## Configuration
 
-Create a `.stepdownrc.json` file (optional):
+Optional `.stepdownrc.json`:
 
 ```json
 {
@@ -221,20 +179,11 @@ Create a `.stepdownrc.json` file (optional):
 }
 ```
 
-### Configuration Options
-
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `ignore` | `string[]` | `[]` | Additional glob patterns to ignore when analyzing files |
 
-## CLI Options
-
-- `patterns` - File patterns or directories to analyze (default: `src/**/*.ts`)
-- `--verbose` - Show circular dependencies in output
-- `--json` - Output results in JSON format
-- `--rules <ids>` - Comma-separated rule IDs to run (available: `stepdown`, `nested`; default: all)
-- `--ignore <patterns...>` - Additional ignore patterns
-- `--config <file>` - Configuration file path (default: `.stepdownrc.json`)
+Override the config file path with `--config <file>`.
 
 ## Development
 
@@ -243,9 +192,11 @@ bun install
 bun run dev      # Run CLI from source
 bun run build    # Build
 bun test         # Test
-bun run lint    # Lint + format check (oxlint + oxfmt)
+bun run lint     # Lint + format check (oxlint + oxfmt)
 bun run vet      # Full pipeline: build + typecheck + lint + test
 ```
+
+Architecture and pipeline details: [docs/rule-pipeline-architecture.md](docs/rule-pipeline-architecture.md). Project conventions for contributors: [AGENTS.md](AGENTS.md).
 
 ## License
 
