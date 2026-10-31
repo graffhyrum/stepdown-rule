@@ -42,7 +42,6 @@ export function buildDependencyGraph(
 }
 /**
  * Build a call graph with call-site positions for every known function.
- * Single production CallExpression walker for dependency/call-graph construction.
  */
 export function buildCallGraph(
 	functionNames: Set<string>,
