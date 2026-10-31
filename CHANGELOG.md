@@ -1,5 +1,13 @@
 # @stepdown/analyzer
 
+## Unreleased
+
+### Patch Changes
+
+- Release workflow: add `workflow_dispatch` for manual runs, document the release process, and disable local tag signing. See commit e4c9f46.
+- README: overhaul for first-screen clarity and leaner structure; address CodeRabbit review findings. See commits ab66c7f, bc192fe.
+- Docs: de-slopify README and AGENTS prose; add GitHub OG share image (1280x640); de-slopify src comments.
+
 ## 0.4.6
 
 ### Patch Changes

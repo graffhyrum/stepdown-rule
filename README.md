@@ -2,7 +2,7 @@
 
 A TypeScript AST analyzer and fixer that enforces the stepdown rule: callers appear above callees, so high-level logic sits at the top of a file and low-level details at the bottom. It also catches nested function declarations that appear before logic inside a function body.
 
-Built for TypeScript developers and teams who want consistent, top-down function organization without manual reordering. Ships as a CLI and a programmatic API. Runs on standalone binaries (~98 MiB, Bun runtime embedded) — no runtime install required.
+Built for TypeScript developers and teams who want consistent, top-down function organization without manual reordering. Ships as a CLI and a programmatic API. Runs on standalone binaries (~98 MiB, Bun runtime embedded); no runtime install required.
 
 ## Why use it
 
@@ -162,7 +162,7 @@ function hashPassword(password: string): string {
 
 ## How it works
 
-The analyzer reports **only actionable violations** — violations fixable by reordering code. Only the edges that form a circular dependency cycle are excluded, because reordering cannot break a cycle; those need refactoring. Unrelated violations in the same file may still be reported and auto-fixed.
+The analyzer reports **only actionable violations**: violations fixable by reordering code. Only the edges that form a circular dependency cycle are excluded, because reordering cannot break a cycle; those need refactoring. Unrelated violations in the same file may still be reported and auto-fixed.
 
 - **Reported**: functions (callers) whose callees appear above them. Fixable by moving the caller before the callee.
 - **Not reported**: the edges that participate in a circular dependency (e.g. `funcA → funcB → funcA`). These need architectural changes.
