@@ -3,9 +3,8 @@ import { findNestedViolations } from "./nested-violation-detector";
 import type { RuleContext, Violation, ViolationRule } from "./rule-context";
 
 /**
- * Nested function-before-logic ViolationRule.
- * Detect via nested-violation-detector; transform via nested-block-transform (shared BlockOrderModel).
- * Contract: fix(ctx, []) returns parsed content unchanged (no-op).
+ * Nested function-before-logic rule.
+ * Analyze via nested-violation-detector; transform via nested-block-transform.
  */
 export const nestedRule: ViolationRule = {
 	id: "nested",
