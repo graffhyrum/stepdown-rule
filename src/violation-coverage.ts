@@ -1,5 +1,5 @@
 /**
- * uj1: Each analysis (violation type) must have a fix implementation.
+ * Each analysis (violation type) must have a fix implementation.
  * When adding a new violation type to the analyzer, add it here and provide a fixture.
  */
 export const ACTIONABLE_VIOLATION_TYPES = ["stepdown", "nested"] as const;
