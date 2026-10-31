@@ -16,7 +16,7 @@ This file provides guidance to agents working on this repository.
     - ❌ DON'T: `import { foo } from "./index"` or `import { foo } from "./folder"`
     - ✅ DO: `import { foo } from "./folder/foo"`
 - Use Mermaid for diagrams.
-- Do not fix unused functions or parameters with underscores — delete them.
+- Do not fix unused functions or parameters with underscores; delete them.
 - Commit pre-existing uncommitted changes before starting new work to avoid push-hook conflicts.
 
 ## Subagent Scope Boundaries
