@@ -11,7 +11,6 @@ import {
 	toAgentsFixResults,
 } from "./cli-output";
 import { ExitSuccess, ExitViolationsOrFixErrors } from "./exit-codes";
-// createHumanReporter inlined below (unified reporter module)
 import type { AnalysisResult, FixResult } from "./types";
 export type CliFormat = "human" | "json" | "agents";
 export interface AnalyzeReportOptions {
