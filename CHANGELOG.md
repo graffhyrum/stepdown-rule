@@ -1,5 +1,15 @@
 # @stepdown/analyzer
 
+## Unreleased
+
+### Patch Changes
+
+- Nested-block rule: keep const/let helpers reached via other nested helpers above logic; never move a multi-declarator helper statement; pin const helpers reached by any read (call, alias, argument, or object/array literal), not only calls. Fixes a false positive and prevents `fix` from placing such helpers after `return`, where they are never initialized (TDZ error). See commits f85c012, a81568d, cb0bcea, bb7a93e, 30c0be3, 09f8e37.
+- Build: write generated JSON schemas (`stepdown-schema.json`) with tabs and a trailing newline, and format them with the repo's oxfmt, so `bun run build` no longer dirties the working tree. See commits 3545109, dfb3f0e.
+- Release workflow: add `workflow_dispatch` for manual runs, document the release process, and disable local tag signing. See commit e4c9f46.
+- README: overhaul for first-screen clarity and leaner structure; address CodeRabbit review findings. See commits ab66c7f, bc192fe.
+- Docs: add skill selection analysis and recommendations. See commit bb7711c.
+
 ## 0.4.5
 
 ### Patch Changes
