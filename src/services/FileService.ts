@@ -72,8 +72,6 @@ function isEnoent(error: unknown): boolean {
 	return error.code === "ENOENT";
 }
 
-// toPosixPath imported from file-service-common
-
 function buildIgnore(): string[] {
 	return [...IGNORED_DIRS.map((d) => `**/${d}/**`), "**/*.d.ts"];
 }
