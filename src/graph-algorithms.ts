@@ -1,5 +1,5 @@
 /**
- * Reusable graph algorithms for function dependency analysis.
+ * Graph algorithms for function dependency analysis.
  * Public: topologicalSort, detectCircularDependencies, findAndRemoveLeafFunctions.
  */
 

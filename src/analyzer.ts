@@ -18,7 +18,6 @@ import type {
 
 export { findStepdownViolations } from "./stepdown-violation-detector";
 
-/** Thin facade over {@link Pipeline.run} (mode: analyze). */
 export async function analyzeFiles(
 	patterns: string[],
 	config: Config,

@@ -28,7 +28,6 @@ export async function prepareFix(
 
 /**
  * Shared preflight for analyze commands: build config, resolve files.
- * Concentrates the orchestration that human and agents handlers both need.
  */
 export async function prepareAnalyze(
 	patterns: string[],

@@ -18,7 +18,7 @@ export interface NestedFuncEdge {
  *
  * Detect: nestedFunc before last logic line, name ∉ referencedNested → violation.
  * Fix: pinned (logic|other|referenced nested or reached const/let helper) in source order, then movable
- * nestedFuncs topo-sorted (caller before callee) — including a single movable nested.
+ * nestedFuncs topo-sorted (caller before callee), including a single movable nested.
  *
  * `referencedNested` holds the helpers that must stay in place: those logic references
  * directly (including function declarations), plus non-hoisted (const/let) helpers

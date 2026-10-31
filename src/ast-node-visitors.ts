@@ -107,8 +107,7 @@ export function reconstructStatements(
 	];
 }
 /**
- * Reusable AST node visitors and categorization logic.
- * Consolidates visitor patterns from analyzer.ts and fixer.ts.
+ * AST node visitors and categorization logic.
  */
 export interface FunctionNode {
 	node: ts.Statement;
