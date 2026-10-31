@@ -3,7 +3,7 @@ import { parseContent as parseContentCommon, toPosixPath } from "./file-service-
 import type { FileServiceOptions, IFileService, ParsedFile } from "./types";
 
 /**
- * In-memory {@link IFileService} for unit tests — no disk, no temp dirs.
+ * In-memory {@link IFileService} for unit tests: no disk, no temp dirs.
  */
 export class InMemoryFileService implements IFileService {
 	private readonly files = new Map<string, string>();

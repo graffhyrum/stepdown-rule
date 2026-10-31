@@ -19,13 +19,13 @@ export interface FixFilesParams {
 /** @deprecated Use {@link FixFilesParams}. */
 export type FixFilesOptions = Pick<FixFilesParams, "dryRun" | "resolvedFiles">;
 
-/** Thin facade over {@link Pipeline.run} (mode: fix); returns fixResults only. */
+/** Run Pipeline in fix mode; return fixResults only. */
 export async function fixFiles(params: FixFilesParams): Promise<FixResult[]> {
 	const { fixResults } = await runPipeline(params);
 	return fixResults;
 }
 
-/** Thin facade over {@link Pipeline.run} (mode: fix). */
+/** Run Pipeline in fix mode. */
 export async function runPipeline(params: FixFilesParams): Promise<PipelineResult> {
 	const service = params.fileService ?? new FileService({ ignore: params.config.ignore });
 	return Pipeline.run({

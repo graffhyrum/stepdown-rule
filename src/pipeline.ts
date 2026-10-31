@@ -23,9 +23,7 @@ export interface PipelineRunOptions {
 }
 
 /**
- * Canonical analyze/fix entry (`src/pipeline.ts`).
- * Owns Resolved→Parsed→Analyzed→Fixed per file.
- * Mode is the only analyze/fix switch — config has no fix flag.
+ * Analyze/fix entry point. Mode selects analyze or fix; config has no fix flag.
  */
 export const Pipeline = {
 	async run(options: PipelineRunOptions): Promise<PipelineResult> {
