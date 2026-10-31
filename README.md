@@ -11,7 +11,7 @@ Built for TypeScript developers and teams who want consistent, top-down function
 - **Two rules, one tool**: the `stepdown` rule (module scope) and the `nested` rule (function body). Run either or both, independently.
 - **Agent- and CI-friendly**: a stable JSON envelope (`stepdown-rule agents ...`) with documented exit codes and schemas.
 
-## Install
+## Installation
 
 ### From GitHub Releases (recommended)
 
@@ -162,11 +162,11 @@ function hashPassword(password: string): string {
 
 ## How it works
 
-The analyzer reports **only actionable violations** — violations fixable by reordering code. Functions involved in circular dependency cycles are excluded from reporting because reordering cannot fix them; they require refactoring.
+The analyzer reports **only actionable violations** — violations fixable by reordering code. Only the edges that form a circular dependency cycle are excluded, because reordering cannot break a cycle; those need refactoring. Unrelated violations in the same file may still be reported and auto-fixed.
 
-- **Reported**: functions that call other functions appearing below them. Fixable by moving the caller after the callee.
-- **Not reported**: functions in circular dependencies (e.g. `funcA → funcB → funcA`). These need architectural changes.
-- Circular dependencies are always detected and reported separately (`--verbose` or `--json`). Files with cycles cannot be auto-fixed.
+- **Reported**: functions (callers) whose callees appear above them. Fixable by moving the caller before the callee.
+- **Not reported**: the edges that participate in a circular dependency (e.g. `funcA → funcB → funcA`). These need architectural changes.
+- Circular dependencies are always detected and reported separately (`--verbose` or `--json`). Only the cycle edges are left untouched; other violations in the same file can still be auto-fixed.
 
 ## Configuration
 
