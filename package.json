@@ -30,7 +30,7 @@
 	"types": "./dist/index.d.ts",
 	"scripts": {
 		"build": "bun scripts/build.ts && bun run build:declaration",
-		"build:declaration": "bunx tsgo --emitDeclarationOnly --project tsconfig.types.json",
+		"build:declaration": "tsc --emitDeclarationOnly --project tsconfig.types.json",
 		"postbuild": "bun run --shell bun remove-buildinfo",
 		"remove-buildinfo": "bun scripts/remove-buildinfo.ts",
 		"compile:release": "bun scripts/compile-release.ts",
