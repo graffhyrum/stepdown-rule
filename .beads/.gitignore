@@ -1,6 +1,13 @@
 # Dolt database (managed by Dolt, not git)
+# Flat SQLite file `dolt` and sidecars — not only the `dolt/` directory.
+dolt
 dolt/
+dolt-*
+dolt.*
 dolt-access.lock
+
+# Local snapshot history (machine-local; do not track)
+.br_history/
 
 # Runtime files
 *.lock
