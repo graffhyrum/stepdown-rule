@@ -51,8 +51,8 @@
 	"dependencies": {
 		"arktype": "^2.2.9",
 		"commander": "^15.0.0",
-		"glob": "^13.0.6",
-		"minimatch": "^10.2.6",
+		"glob": "^14.0.2",
+		"minimatch": "^11.0.1",
 		"picocolors": "^1.1.1",
 		"typescript": "^6.0.3"
 	},
